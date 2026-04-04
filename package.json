@@ -1,0 +1,17 @@
+{
+  "name": "pulse",
+  "private": true,
+  "scripts": {
+    "dev": "turbo dev",
+    "build": "turbo build",
+    "test": "turbo test",
+    "lint": "turbo lint",
+    "db:push": "pnpm --filter @pulse/api db:push",
+    "db:generate": "pnpm --filter @pulse/api db:generate"
+  },
+  "devDependencies": {
+    "turbo": "^2.5.0",
+    "typescript": "^5.8.0"
+  },
+  "packageManager": "pnpm@10.33.0"
+}
