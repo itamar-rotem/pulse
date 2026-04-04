@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Session {
+  id                  String        @id @default(uuid())
+  tool                String
+  projectSlug         String        @map("project_slug")
+  sessionType         String        @map("session_type")
+  model               String
+  startedAt           DateTime      @default(now()) @map("started_at")
+  endedAt             DateTime?     @map("ended_at")
+  inputTokens         Int           @default(0) @map("input_tokens")
+  outputTokens        Int           @default(0) @map("output_tokens")
+  cacheCreationTokens Int           @default(0) @map("cache_creation_tokens")
+  cacheReadTokens     Int           @default(0) @map("cache_read_tokens")
+  costUsd             Float         @default(0) @map("cost_usd")
+  tokenEvents         TokenEvent[]
+
+  @@map("sessions")
+}
+
+model TokenEvent {
+  id                     String   @id @default(uuid())
+  sessionId              String   @map("session_id")
+  timestamp              DateTime @default(now())
+  tool                   String
+  model                  String
+  projectSlug            String   @map("project_slug")
+  sessionType            String   @map("session_type")
+  inputTokens            Int      @map("input_tokens")
+  outputTokens           Int      @map("output_tokens")
+  cacheCreationTokens    Int      @default(0) @map("cache_creation_tokens")
+  cacheReadTokens        Int      @default(0) @map("cache_read_tokens")
+  costDeltaUsd           Float    @map("cost_delta_usd")
+  cumulativeInputTokens  Int      @map("cumulative_input_tokens")
+  cumulativeOutputTokens Int      @map("cumulative_output_tokens")
+  cumulativeCostUsd      Float    @map("cumulative_cost_usd")
+  burnRatePerMin         Float    @map("burn_rate_per_min")
+
+  session                Session  @relation(fields: [sessionId], references: [id])
+
+  @@index([sessionId])
+  @@index([timestamp])
+  @@map("token_events")
+}
