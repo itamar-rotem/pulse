@@ -1,6 +1,7 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
 import { redisSub } from './services/redis.js';
+import { startSession, updateSession, endSession } from './services/session-service.js';
 
 interface TaggedWebSocket extends WebSocket {
   role?: 'agent' | 'dashboard';
@@ -30,6 +31,8 @@ export function createWsServer(server: Server): WebSocketServer {
       try {
         const msg = JSON.parse(raw.toString());
         if (ws.role === 'agent') {
+          // Persist to DB then broadcast to dashboard
+          handleAgentMessage(msg).catch(() => {});
           broadcast(wss, { type: msg.type, data: msg.data }, 'dashboard');
         }
       } catch {
@@ -49,6 +52,38 @@ export function createWsServer(server: Server): WebSocketServer {
   wss.on('close', () => clearInterval(interval));
 
   return wss;
+}
+
+async function handleAgentMessage(msg: { type: string; data: Record<string, unknown> }): Promise<void> {
+  if (msg.type === 'session_start') {
+    await startSession({
+      id: msg.data.id as string,
+      tool: msg.data.tool as string,
+      projectSlug: msg.data.projectSlug as string,
+      sessionType: msg.data.sessionType as string,
+      model: msg.data.model as string,
+    }).catch(() => {}); // ignore if session already exists
+  } else if (msg.type === 'token_event') {
+    const d = msg.data;
+    await updateSession({
+      sessionId: d.sessionId as string,
+      inputTokens: d.inputTokens as number,
+      outputTokens: d.outputTokens as number,
+      cacheCreationTokens: d.cacheCreationTokens as number,
+      cacheReadTokens: d.cacheReadTokens as number,
+      costDeltaUsd: d.costDeltaUsd as number,
+      cumulativeInputTokens: d.cumulativeInputTokens as number,
+      cumulativeOutputTokens: d.cumulativeOutputTokens as number,
+      cumulativeCostUsd: d.cumulativeCostUsd as number,
+      burnRatePerMin: d.burnRatePerMin as number,
+      model: d.model as string,
+      tool: d.tool as string,
+      projectSlug: d.projectSlug as string,
+      sessionType: d.sessionType as string,
+    });
+  } else if (msg.type === 'session_end') {
+    await endSession(msg.data.sessionId as string);
+  }
 }
 
 function broadcast(wss: WebSocketServer, message: unknown, targetRole: string): void {

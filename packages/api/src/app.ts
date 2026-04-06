@@ -1,11 +1,11 @@
-import express from 'express';
+import express, { Express } from 'express';
 import cors from 'cors';
 import { healthRouter } from './routes/health.js';
 import { sessionsRouter } from './routes/sessions.js';
 import { dashboardRouter } from './routes/dashboard.js';
 import { authMiddleware } from './middleware/auth.js';
 
-export function createApp() {
+export function createApp(): Express {
   const app = express();
 
   app.use(cors());

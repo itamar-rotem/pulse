@@ -1,4 +1,4 @@
-import { Router } from 'express';
+import { Router, IRouter } from 'express';
 import {
   startSession,
   updateSession,
@@ -7,7 +7,7 @@ import {
   getSessionById,
 } from '../services/session-service.js';
 
-export const sessionsRouter = Router();
+export const sessionsRouter: IRouter = Router();
 
 sessionsRouter.post('/start', async (req, res) => {
   try {

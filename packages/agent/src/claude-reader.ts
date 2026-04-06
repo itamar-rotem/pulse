@@ -65,7 +65,8 @@ export class ClaudeCodeReader extends EventEmitter {
     const sessionsDir = getSessionDir();
     console.log(`Watching Claude Code sessions at: ${sessionsDir}`);
 
-    this.watcher = watch(join(sessionsDir, '**/*.jsonl'), {
+    const watchPattern = sessionsDir.replace(/\\/g, '/') + '/**/*.jsonl';
+    this.watcher = watch(watchPattern, {
       persistent: true,
       ignoreInitial: false,
       awaitWriteFinish: { stabilityThreshold: 500, pollInterval: 100 },

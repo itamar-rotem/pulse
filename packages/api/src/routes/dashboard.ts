@@ -1,7 +1,7 @@
-import { Router } from 'express';
+import { Router, IRouter } from 'express';
 import { getLiveSummary } from '../services/session-service.js';
 
-export const dashboardRouter = Router();
+export const dashboardRouter: IRouter = Router();
 
 dashboardRouter.get('/live-summary', async (_req, res) => {
   try {
