@@ -1,40 +1,82 @@
 'use client';
 
-import Link from 'next/link';
-import { usePathname } from 'next/navigation';
-import { cn } from '@/lib/utils';
-
-const navItems = [
-  { href: '/', label: 'Dashboard', icon: '~' },
-  { href: '/live', label: 'Live View', icon: '>' },
-  { href: '/sessions', label: 'Sessions', icon: '#' },
-  { href: '/settings', label: 'Settings', icon: '*' },
-];
+import {
+  LayoutDashboard,
+  Radio,
+  History,
+  Lightbulb,
+  Bell,
+  ShieldCheck,
+  Settings,
+} from 'lucide-react';
+import { NavItem } from '@/components/ui/nav-item';
+import { PlanCard } from '@/components/ui/plan-card';
+import { useLiveSummary } from '@/hooks/use-sessions';
 
 export function Sidebar() {
-  const pathname = usePathname();
+  const { data: summary } = useLiveSummary();
+  const totalValue = summary?.totalCostToday ?? 0;
 
   return (
-    <aside className="w-56 border-r bg-neutral-50 dark:bg-neutral-900 p-4 flex flex-col gap-1">
-      <div className="mb-6">
-        <h1 className="text-xl font-bold tracking-tight">Pulse</h1>
-        <p className="text-xs text-neutral-500">AI Dev Health Monitor</p>
-      </div>
-      <nav className="flex flex-col gap-1">
-        {navItems.map((item) => (
-          <Link
-            key={item.href}
-            href={item.href}
-            className={cn(
-              'flex items-center gap-2 rounded-md px-3 py-2 text-sm transition-colors hover:bg-neutral-200 dark:hover:bg-neutral-800',
-              pathname === item.href && 'bg-neutral-200 dark:bg-neutral-800 font-medium'
-            )}
+    <aside className="w-[240px] shrink-0 border-r border-[var(--border)] bg-[var(--bg)] flex flex-col h-screen sticky top-0">
+      {/* Logo */}
+      <div className="px-5 py-5">
+        <div className="flex items-center gap-2.5">
+          <div
+            className="size-8 rounded-[9px] flex items-center justify-center"
+            style={{
+              background: 'linear-gradient(135deg, var(--accent), var(--accent-dark))',
+            }}
           >
-            <span className="font-mono text-xs w-4">{item.icon}</span>
-            {item.label}
-          </Link>
-        ))}
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <circle cx="8" cy="8" r="5" stroke="white" strokeWidth="2" fill="none" />
+            </svg>
+          </div>
+          <span className="text-[17px] font-bold text-[var(--text-1)]">Pulse</span>
+        </div>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 px-3 space-y-6 overflow-y-auto">
+        {/* Monitor */}
+        <div>
+          <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-3)]">
+            Monitor
+          </p>
+          <div className="space-y-0.5">
+            <NavItem href="/" label="Dashboard" icon={LayoutDashboard} />
+            <NavItem href="/live" label="Live View" icon={Radio} />
+            <NavItem href="/sessions" label="Sessions" icon={History} />
+          </div>
+        </div>
+
+        {/* Intelligence */}
+        <div>
+          <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-3)]">
+            Intelligence
+          </p>
+          <div className="space-y-0.5">
+            <NavItem href="/insights" label="Insights" icon={Lightbulb} badge={3} />
+            <NavItem href="/alerts" label="Alerts" icon={Bell} />
+            <NavItem href="/rules" label="Rules" icon={ShieldCheck} />
+          </div>
+        </div>
+
+        {/* Configure */}
+        <div>
+          <p className="px-3 mb-1 text-[10px] font-semibold uppercase tracking-wider text-[var(--text-3)]">
+            Configure
+          </p>
+          <div className="space-y-0.5">
+            <NavItem href="/settings" label="Settings" icon={Settings} />
+          </div>
+        </div>
       </nav>
+
+      {/* Plan card pinned to bottom */}
+      <div className="px-3 pb-4 pt-2">
+        <PlanCard planName="Max Plan" monthlyCost={100} totalValue={totalValue} />
+      </div>
     </aside>
   );
 }

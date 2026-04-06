@@ -1,18 +1,8 @@
 'use client';
 
-import { Badge } from '@/components/ui/badge';
+import { PageHeader } from '@/components/ui/page-header';
 
-interface HeaderProps {
-  connected: boolean;
-}
-
-export function Header({ connected }: HeaderProps) {
-  return (
-    <header className="h-14 border-b flex items-center justify-between px-6">
-      <div />
-      <Badge variant={connected ? 'default' : 'secondary'}>
-        {connected ? 'Live' : 'Disconnected'}
-      </Badge>
-    </header>
-  );
+/** @deprecated — use PageHeader directly. This shim exists during the migration. */
+export function Header({ connected }: { connected: boolean }) {
+  return <PageHeader title="" connected={connected} />;
 }
