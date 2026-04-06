@@ -46,6 +46,10 @@ export default function LivePage() {
           agentCost={summary?.agentCostToday ?? 0}
           humanSessions={summary?.humanSessionsToday ?? 0}
           agentSessions={summary?.agentSessionsToday ?? 0}
+          totalInputTokens={summary?.totalInputTokens ?? 0}
+          totalOutputTokens={summary?.totalOutputTokens ?? 0}
+          totalCacheCreationTokens={summary?.totalCacheCreationTokens ?? 0}
+          totalCacheReadTokens={summary?.totalCacheReadTokens ?? 0}
         />
       </div>
     </div>
