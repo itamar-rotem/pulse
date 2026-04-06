@@ -1,7 +1,9 @@
 'use client';
 
 import Link from 'next/link';
-import { Badge } from '@/components/ui/badge';
+import { StatTag } from '@/components/ui/stat-tag';
+import { Sparkline } from '@/components/ui/sparkline';
+import { formatTokens, formatCost, formatDuration } from '@/lib/format';
 import {
   Table,
   TableBody,
@@ -28,18 +30,10 @@ interface SessionTableProps {
   sessions: Session[];
 }
 
-function formatDuration(ms: number): string {
-  const minutes = Math.floor(ms / 60000);
-  if (minutes < 60) return `${minutes}m`;
-  const hours = Math.floor(minutes / 60);
-  const remainingMinutes = minutes % 60;
-  return `${hours}h ${remainingMinutes}m`;
-}
-
 export function SessionTable({ sessions }: SessionTableProps) {
   if (sessions.length === 0) {
     return (
-      <p className="text-center text-neutral-500 py-12">
+      <p className="text-center text-[var(--text-2)] py-12 text-[13px]">
         No sessions recorded yet. Start using Claude Code with the Pulse agent running.
       </p>
     );
@@ -52,41 +46,55 @@ export function SessionTable({ sessions }: SessionTableProps) {
           <TableHead>Project</TableHead>
           <TableHead>Type</TableHead>
           <TableHead>Model</TableHead>
-          <TableHead>Started</TableHead>
           <TableHead>Duration</TableHead>
           <TableHead className="text-right">Tokens</TableHead>
-          <TableHead className="text-right">Cost</TableHead>
+          <TableHead className="text-right">Value</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {sessions.map((session) => {
-          const duration = session.endedAt
-            ? formatDuration(new Date(session.endedAt).getTime() - new Date(session.startedAt).getTime())
-            : 'Active';
           const totalTokens = session.inputTokens + session.outputTokens;
+          const duration = formatDuration(session.startedAt, session.endedAt);
+          const isAnomaly = session.costUsd > 50;
+          const sparkData = [session.inputTokens, session.outputTokens];
 
           return (
-            <TableRow key={session.id}>
+            <TableRow key={session.id} className="group cursor-pointer">
               <TableCell>
-                <Link href={`/sessions/${session.id}`} className="font-mono text-sm hover:underline">
+                <Link
+                  href={`/sessions/${session.id}`}
+                  className="text-[13px] font-semibold text-[var(--text-1)] hover:text-[var(--accent)]"
+                >
                   {session.projectSlug}
                 </Link>
               </TableCell>
               <TableCell>
-                <Badge variant={session.sessionType === 'human' ? 'default' : 'secondary'}>
+                <StatTag variant={session.sessionType === 'human' ? 'blue' : 'purple'}>
                   {session.sessionType}
-                </Badge>
+                </StatTag>
               </TableCell>
-              <TableCell className="text-sm">{session.model}</TableCell>
-              <TableCell className="text-sm">
-                {new Date(session.startedAt).toLocaleString()}
+              <TableCell className="text-[12px] text-[var(--text-2)]">
+                {session.model}
               </TableCell>
-              <TableCell className="text-sm">{duration}</TableCell>
-              <TableCell className="text-right font-mono text-sm">
-                {(totalTokens / 1000).toFixed(1)}k
+              <TableCell className="text-[12px] text-[var(--text-2)]">
+                {duration}
               </TableCell>
-              <TableCell className="text-right font-mono text-sm font-medium">
-                ${session.costUsd.toFixed(4)}
+              <TableCell className="text-right">
+                <div className="flex items-center justify-end gap-2">
+                  <Sparkline data={sparkData} height={14} />
+                  <span className="text-[12px] font-mono text-[var(--text-1)]">
+                    {formatTokens(totalTokens)}
+                  </span>
+                </div>
+              </TableCell>
+              <TableCell className="text-right">
+                <span
+                  className={`text-[12px] font-mono font-semibold ${
+                    isAnomaly ? 'text-[var(--red)]' : 'text-[var(--text-1)]'
+                  }`}
+                >
+                  {formatCost(session.costUsd)}
+                </span>
               </TableCell>
             </TableRow>
           );
