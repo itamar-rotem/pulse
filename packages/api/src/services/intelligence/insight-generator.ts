@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import { alertManager } from './alert-manager.js';
 import type { Insight, InsightCategory } from '@pulse/shared';
 import { prisma } from '../prisma.js';
+import type { RuleType, RuleAction } from '@prisma/client';
 
 function dedupKey(category: string, identifiers: Record<string, unknown>): string {
   const sorted = JSON.stringify(identifiers, Object.keys(identifiers).sort());
@@ -245,14 +246,25 @@ class InsightGenerator {
     const metadata = insight.metadata as Record<string, unknown>;
     if (insight.category === 'COST_OPTIMIZATION' && metadata.suggestedRule) {
       const suggested = metadata.suggestedRule as Record<string, unknown>;
+
+      // Validate required fields
+      const type = suggested.type as RuleType | undefined;
+      const scope = suggested.scope as object | undefined;
+      const condition = suggested.condition as object | undefined;
+      const action = suggested.action as RuleAction | undefined;
+
+      if (!type || !scope || !condition || !action) {
+        throw new Error('suggestedRule metadata is missing required fields (type, scope, condition, action)');
+      }
+
       const rule = await prisma.rule.create({
         data: {
           name: `Auto: ${insight.title}`,
-          type: suggested.type as string,
-          scope: suggested.scope as object,
-          condition: suggested.condition as object,
-          action: suggested.action as string,
-        } as any,
+          type,
+          scope,
+          condition,
+          action,
+        },
       });
       ruleId = rule.id;
     }
