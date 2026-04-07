@@ -35,6 +35,8 @@ import { insightGenerator } from '../src/services/intelligence/insight-generator
 describe('InsightGenerator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: findMany returns empty array (analyzePeakUsage needs < 10 sessions to short-circuit)
+    mockPrisma.session.findMany.mockResolvedValue([]);
   });
 
   describe('analyze — model optimization', () => {
