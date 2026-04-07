@@ -1,7 +1,5 @@
 import { Router, IRouter } from 'express';
-import { PrismaClient } from '@prisma/client';
-
-const prisma = new PrismaClient();
+import { prisma } from '../services/prisma.js';
 export const rulesRouter: IRouter = Router();
 
 rulesRouter.get('/', async (_req, res) => {

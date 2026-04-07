@@ -14,6 +14,10 @@ vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn(() => mockPrisma),
 }));
 
+vi.mock('../src/services/prisma.js', () => ({
+  prisma: mockPrisma,
+}));
+
 // Mock global fetch
 const mockFetch = vi.fn();
 vi.stubGlobal('fetch', mockFetch);

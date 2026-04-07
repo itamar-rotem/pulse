@@ -1,9 +1,7 @@
-import { PrismaClient } from '@prisma/client';
 import { createHash } from 'crypto';
 import { alertManager } from './alert-manager.js';
 import type { Insight, InsightCategory } from '@pulse/shared';
-
-const prisma = new PrismaClient();
+import { prisma } from '../prisma.js';
 
 function dedupKey(category: string, identifiers: Record<string, unknown>): string {
   const sorted = JSON.stringify(identifiers, Object.keys(identifiers).sort());

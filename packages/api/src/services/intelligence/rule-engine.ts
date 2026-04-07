@@ -1,8 +1,6 @@
-import { PrismaClient } from '@prisma/client';
 import { redis } from '../redis.js';
 import type { RuleViolation, RuleScope, RuleCondition, Severity, RuleAction, RuleType } from '@pulse/shared';
-
-const prisma = new PrismaClient();
+import { prisma } from '../prisma.js';
 
 interface CachedRule {
   id: string;

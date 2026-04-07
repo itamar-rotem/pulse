@@ -19,6 +19,10 @@ vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn(() => mockPrisma),
 }));
 
+vi.mock('../src/services/prisma.js', () => ({
+  prisma: mockPrisma,
+}));
+
 // Mock redis
 vi.mock('../src/services/redis.js', () => ({
   publishAlert: vi.fn(),

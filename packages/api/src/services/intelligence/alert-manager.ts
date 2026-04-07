@@ -1,9 +1,8 @@
-import { PrismaClient, Prisma } from '@prisma/client';
+import { Prisma } from '@prisma/client';
 import { publishAlert } from '../redis.js';
 import { webhookService } from './webhook-service.js';
 import type { CreateAlertInput, AlertFilters, Alert } from '@pulse/shared';
-
-const prisma = new PrismaClient();
+import { prisma } from '../prisma.js';
 
 class AlertManager {
   async create(input: CreateAlertInput): Promise<Alert> {

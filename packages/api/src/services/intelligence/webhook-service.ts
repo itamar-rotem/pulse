@@ -1,8 +1,6 @@
-import { PrismaClient } from '@prisma/client';
 import { createHmac } from 'crypto';
 import type { Alert } from '@pulse/shared';
-
-const prisma = new PrismaClient();
+import { prisma } from '../prisma.js';
 
 const MAX_FAIL_COUNT = 5;
 

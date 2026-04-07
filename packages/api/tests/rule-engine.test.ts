@@ -9,6 +9,10 @@ vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn(() => mockPrisma),
 }));
 
+vi.mock('../src/services/prisma.js', () => ({
+  prisma: mockPrisma,
+}));
+
 const mockRedis = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn() }));
 vi.mock('../src/services/redis.js', () => ({
   redis: mockRedis,

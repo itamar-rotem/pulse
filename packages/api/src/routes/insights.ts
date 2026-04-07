@@ -1,8 +1,6 @@
 import { Router, IRouter } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { insightGenerator } from '../services/intelligence/insight-generator.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../services/prisma.js';
 export const insightsRouter: IRouter = Router();
 
 insightsRouter.get('/', async (req, res) => {

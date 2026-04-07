@@ -22,6 +22,10 @@ vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn(() => mockPrisma),
 }));
 
+vi.mock('../src/services/prisma.js', () => ({
+  prisma: mockPrisma,
+}));
+
 vi.mock('../src/services/intelligence/alert-manager.js', () => ({
   alertManager: { create: vi.fn() },
 }));

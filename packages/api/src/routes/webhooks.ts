@@ -1,8 +1,6 @@
 import { Router, IRouter } from 'express';
-import { PrismaClient } from '@prisma/client';
 import { webhookService } from '../services/intelligence/webhook-service.js';
-
-const prisma = new PrismaClient();
+import { prisma } from '../services/prisma.js';
 export const webhooksRouter: IRouter = Router();
 
 webhooksRouter.get('/', async (_req, res) => {

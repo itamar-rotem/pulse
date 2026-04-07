@@ -1,7 +1,5 @@
-import { PrismaClient } from '@prisma/client';
 import { publishTokenEvent, publishSessionUpdate } from './redis.js';
-
-const prisma = new PrismaClient();
+import { prisma } from './prisma.js';
 
 export async function startSession(data: {
   id: string;
