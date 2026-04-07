@@ -1,8 +1,10 @@
 import { createHmac } from 'crypto';
-import type { Alert } from '@pulse/shared';
 import { prisma } from '../prisma.js';
+import type { Alert } from '@pulse/shared';
 
 const MAX_FAIL_COUNT = 5;
+const RETRY_DELAYS = [1000, 5000, 30000]; // 1s, 5s, 30s
+const MAX_ATTEMPTS = 3;
 
 class WebhookService {
   async dispatch(alert: Alert): Promise<void> {
@@ -13,16 +15,66 @@ class WebhookService {
       },
     });
 
-    await Promise.allSettled(
-      webhooks.map((wh) => this.deliver(wh, alert)),
-    );
+    for (const wh of webhooks) {
+      // Fire-and-forget: don't await delivery
+      this.deliverWithRetry(wh, alert).catch(() => {});
+    }
   }
 
-  private async deliver(
+  private async deliverWithRetry(
     webhook: { id: string; url: string; secret: string | null; failCount: number },
     alert: Alert,
   ): Promise<void> {
-    const payload = JSON.stringify({
+    const payload = this.buildPayload(alert);
+    const headers = this.buildHeaders(payload, webhook.secret);
+
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+      try {
+        const res = await fetch(webhook.url, {
+          method: 'POST',
+          headers,
+          body: payload,
+          signal: AbortSignal.timeout(10_000),
+        });
+
+        if (res.ok) {
+          // Success — reset failure tracking
+          await prisma.webhook.update({
+            where: { id: webhook.id },
+            data: { lastSentAt: new Date(), failCount: 0, lastError: null },
+          });
+          return;
+        }
+
+        // 4xx = client error, don't retry
+        if (res.status >= 400 && res.status < 500) {
+          await this.recordFailure(webhook, `HTTP ${res.status}`);
+          return;
+        }
+
+        // 5xx = server error, retry if attempts remain
+        if (attempt < MAX_ATTEMPTS) {
+          await this.delay(RETRY_DELAYS[attempt - 1]);
+          continue;
+        }
+
+        // Final attempt failed
+        await this.recordFailure(webhook, `HTTP ${res.status}`);
+      } catch (err) {
+        // Network error — retry if attempts remain
+        if (attempt < MAX_ATTEMPTS) {
+          await this.delay(RETRY_DELAYS[attempt - 1]);
+          continue;
+        }
+
+        // Final attempt failed
+        await this.recordFailure(webhook, (err as Error).message);
+      }
+    }
+  }
+
+  private buildPayload(alert: Alert): string {
+    return JSON.stringify({
       event: alert.type,
       alert: {
         id: alert.id,
@@ -34,45 +86,35 @@ class WebhookService {
       },
       timestamp: new Date().toISOString(),
     });
+  }
 
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-
-    if (webhook.secret) {
-      const signature = createHmac('sha256', webhook.secret)
+  private buildHeaders(payload: string, secret: string | null): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+    if (secret) {
+      headers['X-Pulse-Signature'] = createHmac('sha256', secret)
         .update(payload)
         .digest('hex');
-      headers['X-Pulse-Signature'] = signature;
     }
+    return headers;
+  }
 
-    try {
-      const res = await fetch(webhook.url, {
-        method: 'POST',
-        headers,
-        body: payload,
-        signal: AbortSignal.timeout(10_000),
-      });
+  private async recordFailure(
+    webhook: { id: string; failCount: number },
+    error: string,
+  ): Promise<void> {
+    const newFailCount = webhook.failCount + 1;
+    await prisma.webhook.update({
+      where: { id: webhook.id },
+      data: {
+        failCount: { increment: 1 },
+        lastError: error,
+        ...(newFailCount >= MAX_FAIL_COUNT ? { enabled: false } : {}),
+      },
+    });
+  }
 
-      if (!res.ok) {
-        throw new Error(`HTTP ${res.status}`);
-      }
-
-      await prisma.webhook.update({
-        where: { id: webhook.id },
-        data: { lastSentAt: new Date(), failCount: 0, lastError: null },
-      });
-    } catch (err) {
-      const newFailCount = webhook.failCount + 1;
-      await prisma.webhook.update({
-        where: { id: webhook.id },
-        data: {
-          failCount: { increment: 1 },
-          lastError: (err as Error).message,
-          ...(newFailCount >= MAX_FAIL_COUNT ? { enabled: false } : {}),
-        },
-      });
-    }
+  private delay(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
   async test(webhookId: string): Promise<{ success: boolean; statusCode?: number; error?: string }> {
