@@ -143,7 +143,7 @@ export async function getLiveSummary() {
     }),
   ]);
 
-  const [humanStats, agentStats] = await Promise.all([
+  const [humanStats, agentStats, tokenTotals] = await Promise.all([
     prisma.session.aggregate({
       where: { startedAt: { gte: todayStart }, sessionType: 'human' },
       _sum: { costUsd: true },
@@ -154,7 +154,21 @@ export async function getLiveSummary() {
       _sum: { costUsd: true },
       _count: true,
     }),
+    prisma.session.aggregate({
+      where: { startedAt: { gte: todayStart } },
+      _sum: {
+        inputTokens: true,
+        outputTokens: true,
+        cacheCreationTokens: true,
+        cacheReadTokens: true,
+      },
+    }),
   ]);
+
+  const totalInputTokens = tokenTotals._sum.inputTokens || 0;
+  const totalOutputTokens = tokenTotals._sum.outputTokens || 0;
+  const totalCacheCreationTokens = tokenTotals._sum.cacheCreationTokens || 0;
+  const totalCacheReadTokens = tokenTotals._sum.cacheReadTokens || 0;
 
   return {
     activeSessions: activeSessions.length,
@@ -164,5 +178,9 @@ export async function getLiveSummary() {
     agentCostToday: agentStats._sum.costUsd || 0,
     humanSessionsToday: humanStats._count || 0,
     agentSessionsToday: agentStats._count || 0,
+    totalInputTokens,
+    totalOutputTokens,
+    totalCacheCreationTokens,
+    totalCacheReadTokens,
   };
 }
