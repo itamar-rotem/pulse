@@ -1,4 +1,4 @@
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, Prisma } from '@prisma/client';
 import { publishAlert } from '../redis.js';
 import { webhookService } from './webhook-service.js';
 import type { CreateAlertInput, AlertFilters, Alert } from '@pulse/shared';
@@ -13,7 +13,7 @@ class AlertManager {
         severity: input.severity,
         title: input.title,
         message: input.message,
-        metadata: input.metadata ?? {},
+        metadata: (input.metadata ?? {}) as Prisma.InputJsonValue,
         sessionId: input.sessionId ?? null,
         ruleId: input.ruleId ?? null,
         insightId: input.insightId ?? null,
