@@ -1,6 +1,6 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { Server } from 'http';
-import { redisSub } from './services/redis.js';
+import { redisSub, redis } from './services/redis.js';
 import { startSession, updateSession, endSession } from './services/session-service.js';
 import { ruleEngine } from './services/intelligence/rule-engine.js';
 import { anomalyDetector } from './services/intelligence/anomaly-detector.js';
@@ -115,7 +115,7 @@ async function handleAgentMessage(
     });
 
     // Update daily cost counter in Redis
-    const { redis } = await import('./services/redis.js');
+    // redis is imported statically at the top of this file
     redis.incrbyfloat('pulse:daily_cost', d.costDeltaUsd as number).catch(() => {});
     // Increment project cost counter in Redis
     const projectSlug = d.projectSlug as string;

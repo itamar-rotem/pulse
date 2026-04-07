@@ -141,6 +141,106 @@ describe('InsightGenerator', () => {
     });
   });
 
+  describe('analyzePeakUsage', () => {
+    it('detects concentrated usage in a 4-hour window', async () => {
+      // Create 12 sessions concentrated at hours 14-17 UTC
+      const sessions = [];
+      for (let i = 0; i < 12; i++) {
+        const d = new Date();
+        d.setUTCHours(14 + (i % 4), 0, 0, 0);
+        d.setUTCDate(d.getUTCDate() - (i % 6)); // spread over 6 days
+        sessions.push({ startedAt: d, costUsd: 10 });
+      }
+      // Add 2 sessions at different hours with low cost
+      for (let i = 0; i < 2; i++) {
+        const d = new Date();
+        d.setUTCHours(3, 0, 0, 0);
+        d.setUTCDate(d.getUTCDate() - i);
+        sessions.push({ startedAt: d, costUsd: 1 });
+      }
+
+      mockPrisma.session.findMany.mockResolvedValue(sessions);
+      // Model optimization + spend distribution return nothing
+      mockPrisma.session.groupBy.mockResolvedValue([]);
+      // Cost trends: 2 aggregate calls, then plan recommendation: 1 aggregate call
+      mockPrisma.session.aggregate
+        .mockResolvedValueOnce({ _avg: { costUsd: 0 }, _count: 0 })
+        .mockResolvedValueOnce({ _avg: { costUsd: 0 }, _count: 0 })
+        .mockResolvedValueOnce({ _sum: { costUsd: 0 } });
+      // No existing duplicate
+      mockPrisma.insight.findFirst.mockResolvedValue(null);
+      mockPrisma.insight.create.mockImplementation((args: any) => Promise.resolve({ id: 'peak-1', ...args.data }));
+
+      const insights = await insightGenerator.analyze();
+
+      const peakInsight = insights.find((i) => i.category === 'USAGE_PATTERN' && i.title.includes('Peak usage'));
+      expect(peakInsight).toBeDefined();
+      expect(peakInsight!.title).toContain('UTC');
+    });
+
+    it('does not fire when usage is spread evenly', async () => {
+      // Create 24 sessions, one per hour with equal cost
+      const sessions = [];
+      for (let i = 0; i < 24; i++) {
+        const d = new Date();
+        d.setUTCHours(i, 0, 0, 0);
+        d.setUTCDate(d.getUTCDate() - 1);
+        sessions.push({ startedAt: d, costUsd: 10 });
+      }
+
+      mockPrisma.session.findMany.mockResolvedValue(sessions);
+      mockPrisma.session.groupBy.mockResolvedValue([]);
+      mockPrisma.session.aggregate
+        .mockResolvedValueOnce({ _avg: { costUsd: 0 }, _count: 0 })
+        .mockResolvedValueOnce({ _avg: { costUsd: 0 }, _count: 0 })
+        .mockResolvedValueOnce({ _sum: { costUsd: 0 } });
+      mockPrisma.insight.findFirst.mockResolvedValue(null);
+
+      const insights = await insightGenerator.analyze();
+
+      const peakInsight = insights.find((i) => i.category === 'USAGE_PATTERN' && i.title.includes('Peak usage'));
+      expect(peakInsight).toBeUndefined();
+    });
+  });
+
+  describe('analyzePlanRecommendation', () => {
+    it('suggests upgrade when spend far exceeds plan cost', async () => {
+      mockPrisma.session.findMany.mockResolvedValue([]); // < 10 sessions, peak usage skips
+      mockPrisma.session.groupBy.mockResolvedValue([]); // no model/spend insights
+      // analyzeCostTrends calls aggregate twice (this week, last week)
+      mockPrisma.session.aggregate
+        .mockResolvedValueOnce({ _avg: { costUsd: 0 }, _count: 0 }) // cost trends: this week
+        .mockResolvedValueOnce({ _avg: { costUsd: 0 }, _count: 0 }) // cost trends: last week
+        .mockResolvedValueOnce({ _sum: { costUsd: 600 } }); // plan recommendation: 6x the $100 plan
+      mockPrisma.insight.findFirst.mockResolvedValue(null);
+      mockPrisma.insight.create.mockImplementation((args: any) => Promise.resolve({ id: 'plan-1', ...args.data }));
+
+      const insights = await insightGenerator.analyze();
+
+      const planInsight = insights.find((i) => i.category === 'PLAN_RECOMMENDATION');
+      expect(planInsight).toBeDefined();
+      expect(planInsight!.title).toContain('6x value');
+    });
+
+    it('suggests downgrade when utilization is low', async () => {
+      mockPrisma.session.findMany.mockResolvedValue([]);
+      mockPrisma.session.groupBy.mockResolvedValue([]);
+      // analyzeCostTrends calls aggregate twice, then planRecommendation calls once
+      mockPrisma.session.aggregate
+        .mockResolvedValueOnce({ _avg: { costUsd: 0 }, _count: 0 })
+        .mockResolvedValueOnce({ _avg: { costUsd: 0 }, _count: 0 })
+        .mockResolvedValueOnce({ _sum: { costUsd: 20 } }); // 20% of $100 plan
+      mockPrisma.insight.findFirst.mockResolvedValue(null);
+      mockPrisma.insight.create.mockImplementation((args: any) => Promise.resolve({ id: 'plan-2', ...args.data }));
+
+      const insights = await insightGenerator.analyze();
+
+      const planInsight = insights.find((i) => i.category === 'PLAN_RECOMMENDATION');
+      expect(planInsight).toBeDefined();
+      expect(planInsight!.title).toContain('Low plan utilization');
+    });
+  });
+
   describe('weeklyDigest', () => {
     it('creates digest insight and alert', async () => {
       mockPrisma.session.aggregate.mockResolvedValue({ _sum: { costUsd: 450 }, _count: 85 });

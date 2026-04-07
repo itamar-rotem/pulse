@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockRedis = vi.hoisted(() => ({ get: vi.fn(), set: vi.fn() }));
 vi.mock('../src/services/redis.js', () => ({ redis: mockRedis }));
@@ -113,6 +113,31 @@ describe('AnomalyDetector', () => {
       const result = anomalyDetector.checkAbnormalTerminations('s2', 'crash');
 
       expect(result).toBeNull();
+    });
+
+    it('prunes entries older than 1 hour (sliding window)', () => {
+      vi.useFakeTimers();
+
+      // Record 2 abnormal terminations
+      anomalyDetector.checkAbnormalTerminations('s1', 'error');
+      anomalyDetector.checkAbnormalTerminations('s2', 'crash');
+
+      // Advance time by 61 minutes (past the 1-hour window)
+      vi.advanceTimersByTime(61 * 60 * 1000);
+
+      // Record 2 more — the old ones should be pruned, so total is only 2
+      anomalyDetector.checkAbnormalTerminations('s3', 'timeout');
+      const result = anomalyDetector.checkAbnormalTerminations('s4', 'error');
+
+      // Should NOT fire — only 2 recent entries (old 2 expired)
+      expect(result).toBeNull();
+
+      // One more should trigger it (3 within the window)
+      const result2 = anomalyDetector.checkAbnormalTerminations('s5', 'crash');
+      expect(result2).toBeDefined();
+      expect(result2!.severity).toBe('CRITICAL');
+
+      vi.useRealTimers();
     });
   });
 });
