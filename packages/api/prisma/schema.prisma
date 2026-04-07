@@ -13,6 +13,7 @@ model Session {
   projectSlug         String        @map("project_slug")
   sessionType         String        @map("session_type")
   model               String
+  status              SessionStatus @default(ACTIVE)
   startedAt           DateTime      @default(now()) @map("started_at")
   endedAt             DateTime?     @map("ended_at")
   inputTokens         Int           @default(0) @map("input_tokens")
@@ -21,8 +22,15 @@ model Session {
   cacheReadTokens     Int           @default(0) @map("cache_read_tokens")
   costUsd             Float         @default(0) @map("cost_usd")
   tokenEvents         TokenEvent[]
+  alerts              Alert[]
 
   @@map("sessions")
+}
+
+enum SessionStatus {
+  ACTIVE
+  PAUSED
+  ENDED
 }
 
 model TokenEvent {
@@ -48,4 +56,128 @@ model TokenEvent {
   @@index([sessionId])
   @@index([timestamp])
   @@map("token_events")
+}
+
+model Rule {
+  id              String     @id @default(uuid())
+  name            String
+  type            RuleType
+  scope           Json
+  condition       Json
+  action          RuleAction
+  enabled         Boolean    @default(true)
+  lastTriggeredAt DateTime?  @map("last_triggered_at")
+  triggerCount    Int        @default(0) @map("trigger_count")
+  createdAt       DateTime   @default(now()) @map("created_at")
+  updatedAt       DateTime   @updatedAt @map("updated_at")
+  alerts          Alert[]
+
+  @@map("rules")
+}
+
+enum RuleType {
+  COST_CAP_SESSION
+  COST_CAP_DAILY
+  COST_CAP_PROJECT
+  MODEL_RESTRICTION
+  BURN_RATE_LIMIT
+  SESSION_DURATION
+}
+
+enum RuleAction {
+  ALERT
+  PAUSE
+  BLOCK
+}
+
+model Alert {
+  id          String      @id @default(uuid())
+  type        AlertType
+  severity    Severity
+  title       String
+  message     String
+  metadata    Json        @default("{}")
+  status      AlertStatus @default(ACTIVE)
+  sessionId   String?     @map("session_id")
+  session     Session?    @relation(fields: [sessionId], references: [id])
+  ruleId      String?     @map("rule_id")
+  rule        Rule?       @relation(fields: [ruleId], references: [id])
+  insightId   String?     @map("insight_id")
+  insight     Insight?    @relation(fields: [insightId], references: [id])
+  createdAt   DateTime    @default(now()) @map("created_at")
+  readAt      DateTime?   @map("read_at")
+  dismissedAt DateTime?   @map("dismissed_at")
+
+  @@index([status])
+  @@index([type])
+  @@index([createdAt])
+  @@map("alerts")
+}
+
+enum AlertType {
+  RULE_BREACH
+  ANOMALY
+  INSIGHT
+  SYSTEM
+}
+
+enum Severity {
+  INFO
+  WARNING
+  CRITICAL
+}
+
+enum AlertStatus {
+  ACTIVE
+  READ
+  DISMISSED
+  RESOLVED
+}
+
+model Insight {
+  id          String          @id @default(uuid())
+  category    InsightCategory
+  title       String
+  description String
+  impact      Json            @default("{}")
+  metadata    Json            @default("{}")
+  dedupKey    String          @unique @map("dedup_key")
+  status      InsightStatus   @default(ACTIVE)
+  alerts      Alert[]
+  createdAt   DateTime        @default(now()) @map("created_at")
+  dismissedAt DateTime?       @map("dismissed_at")
+  appliedAt   DateTime?       @map("applied_at")
+
+  @@index([status])
+  @@index([category])
+  @@map("insights")
+}
+
+enum InsightCategory {
+  COST_OPTIMIZATION
+  USAGE_PATTERN
+  ANOMALY_TREND
+  PLAN_RECOMMENDATION
+}
+
+enum InsightStatus {
+  ACTIVE
+  DISMISSED
+  APPLIED
+}
+
+model Webhook {
+  id         String   @id @default(uuid())
+  name       String
+  url        String
+  secret     String?
+  events     String[]
+  enabled    Boolean  @default(true)
+  failCount  Int      @default(0) @map("fail_count")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+  lastError  String?  @map("last_error")
+  lastSentAt DateTime? @map("last_sent_at")
+
+  @@map("webhooks")
 }
