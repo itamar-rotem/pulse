@@ -52,7 +52,11 @@ export function createWsServer(server: Server): WebSocketServer {
     ws.on('close', () => {
       // Clean up session registry entries for this connection
       for (const [sessionId, socket] of sessionRegistry) {
-        if (socket === ws) sessionRegistry.delete(sessionId);
+        if (socket === ws) {
+          sessionRegistry.delete(sessionId);
+          // Prevent unbounded session history growth
+          anomalyDetector.clearSession(sessionId);
+        }
       }
     });
   });

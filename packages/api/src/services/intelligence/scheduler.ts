@@ -34,15 +34,11 @@ class Scheduler {
       }, 5 * 60_000),
     );
 
-    // Every midnight UTC: reset daily cost counter
-    this.intervals.push(
-      setInterval(() => {
-        const now = new Date();
-        if (now.getUTCHours() === 0 && now.getUTCMinutes() === 0) {
-          redis.del('pulse:daily_cost').catch(() => {});
-        }
-      }, 60_000),
-    );
+    // Midnight UTC: reset daily cost counter
+    const midnightJob = cron.schedule('0 0 * * *', () => {
+      redis.del('pulse:daily_cost').catch(() => {});
+    }, { timezone: 'UTC' });
+    this.cronJobs.push(midnightJob);
 
     // Sunday 9am UTC: weekly digest
     const weeklyJob = cron.schedule('0 9 * * 0', () => {
