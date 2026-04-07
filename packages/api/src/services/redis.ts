@@ -30,3 +30,11 @@ export async function publishSessionUpdate(session: unknown): Promise<void> {
     // Redis not available
   }
 }
+
+export async function publishAlert(alert: unknown): Promise<void> {
+  try {
+    await redis.publish('pulse:alerts', JSON.stringify(alert));
+  } catch {
+    // Redis not available
+  }
+}
