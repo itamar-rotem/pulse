@@ -12,10 +12,13 @@ import {
 import { NavItem } from '@/components/ui/nav-item';
 import { PlanCard } from '@/components/ui/plan-card';
 import { useLiveSummary } from '@/hooks/use-sessions';
+import { useUnreadAlertCount } from '@/hooks/use-intelligence';
 
 export function Sidebar() {
   const { data: summary } = useLiveSummary();
+  const { data: alertData } = useUnreadAlertCount();
   const totalValue = summary?.totalCostToday ?? 0;
+  const unreadAlerts = alertData?.count ?? 0;
 
   return (
     <aside className="w-[240px] shrink-0 border-r border-[var(--border)] bg-[var(--bg)] flex flex-col h-screen sticky top-0">
@@ -56,8 +59,8 @@ export function Sidebar() {
             Intelligence
           </p>
           <div className="space-y-0.5">
-            <NavItem href="/insights" label="Insights" icon={Lightbulb} badge={3} />
-            <NavItem href="/alerts" label="Alerts" icon={Bell} />
+            <NavItem href="/insights" label="Insights" icon={Lightbulb} />
+            <NavItem href="/alerts" label="Alerts" icon={Bell} badge={unreadAlerts > 0 ? unreadAlerts : undefined} />
             <NavItem href="/rules" label="Rules" icon={ShieldCheck} />
           </div>
         </div>
