@@ -20,6 +20,7 @@ alertsRouter.get('/', async (req, res) => {
   }
 });
 
+// IMPORTANT: /unread-count must be registered before /:id to avoid Express capturing "unread-count" as an id param
 alertsRouter.get('/unread-count', async (_req, res) => {
   try {
     const count = await alertManager.getUnreadCount();
@@ -68,7 +69,11 @@ alertsRouter.put('/:id/resolve', async (req, res) => {
 
 alertsRouter.put('/batch/read', async (req, res) => {
   try {
-    await alertManager.batchMarkRead(req.body.ids);
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({ error: 'ids must be a non-empty array of strings' }); return;
+    }
+    await alertManager.batchMarkRead(ids);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
@@ -77,7 +82,11 @@ alertsRouter.put('/batch/read', async (req, res) => {
 
 alertsRouter.put('/batch/dismiss', async (req, res) => {
   try {
-    await alertManager.batchDismiss(req.body.ids);
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({ error: 'ids must be a non-empty array of strings' }); return;
+    }
+    await alertManager.batchDismiss(ids);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
