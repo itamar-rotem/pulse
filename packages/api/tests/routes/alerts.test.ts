@@ -26,41 +26,47 @@ function createApp() {
   return app;
 }
 
-// NOTE: In alerts.ts, PUT /batch/read and PUT /batch/dismiss are registered AFTER
-// PUT /:id/read and PUT /:id/dismiss. In Express, the /:id/read handler will match
-// first (with id="batch"), so the batch routes are unreachable via their intended paths.
-// The tests below reflect this actual behavior and document the routing concern.
-// The fix would be to register /batch/* routes before /:id/* routes in alerts.ts.
-
 describe('Alerts route validation', () => {
   beforeEach(() => vi.clearAllMocks());
 
-  describe('PUT /alerts/batch/read — route ordering concern', () => {
-    it('routes to /:id/read with id="batch" due to registration order', async () => {
-      // Because /:id/read is registered before /batch/read, Express matches
-      // the batch path as /:id/read with id="batch". markRead is called instead
-      // of batchMarkRead.
+  describe('PUT /alerts/batch/read', () => {
+    it('rejects missing ids', async () => {
       const app = createApp();
-      mockAlertManager.markRead.mockResolvedValue(undefined);
+      const res = await request(app).put('/alerts/batch/read').send({});
+      expect(res.status).toBe(400);
+      expect(res.body.error).toContain('ids');
+    });
+
+    it('rejects empty ids array', async () => {
+      const app = createApp();
+      const res = await request(app).put('/alerts/batch/read').send({ ids: [] });
+      expect(res.status).toBe(400);
+    });
+
+    it('accepts valid ids array', async () => {
+      const app = createApp();
+      mockAlertManager.batchMarkRead.mockResolvedValue(undefined);
 
       const res = await request(app).put('/alerts/batch/read').send({ ids: ['a1', 'a2'] });
-      // The /:id/read handler returns 200 { success: true }
       expect(res.status).toBe(200);
-      expect(mockAlertManager.markRead).toHaveBeenCalledWith('batch');
-      expect(mockAlertManager.batchMarkRead).not.toHaveBeenCalled();
+      expect(mockAlertManager.batchMarkRead).toHaveBeenCalledWith(['a1', 'a2']);
     });
   });
 
-  describe('PUT /alerts/batch/dismiss — route ordering concern', () => {
-    it('routes to /:id/dismiss with id="batch" due to registration order', async () => {
+  describe('PUT /alerts/batch/dismiss', () => {
+    it('rejects non-array ids', async () => {
       const app = createApp();
-      mockAlertManager.dismiss.mockResolvedValue(undefined);
+      const res = await request(app).put('/alerts/batch/dismiss').send({ ids: 'not-array' });
+      expect(res.status).toBe(400);
+    });
+
+    it('accepts valid ids array', async () => {
+      const app = createApp();
+      mockAlertManager.batchDismiss.mockResolvedValue(undefined);
 
       const res = await request(app).put('/alerts/batch/dismiss').send({ ids: ['a1'] });
-      // The /:id/dismiss handler returns 200 { success: true }
       expect(res.status).toBe(200);
-      expect(mockAlertManager.dismiss).toHaveBeenCalledWith('batch');
-      expect(mockAlertManager.batchDismiss).not.toHaveBeenCalled();
+      expect(mockAlertManager.batchDismiss).toHaveBeenCalledWith(['a1']);
     });
   });
 });

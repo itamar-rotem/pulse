@@ -30,6 +30,33 @@ alertsRouter.get('/unread-count', async (_req, res) => {
   }
 });
 
+// IMPORTANT: /batch/* must be registered before /:id/* to avoid Express capturing "batch" as an id param
+alertsRouter.put('/batch/read', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({ error: 'ids must be a non-empty array of strings' }); return;
+    }
+    await alertManager.batchMarkRead(ids);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+alertsRouter.put('/batch/dismiss', async (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+      res.status(400).json({ error: 'ids must be a non-empty array of strings' }); return;
+    }
+    await alertManager.batchDismiss(ids);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 alertsRouter.get('/:id', async (req, res) => {
   try {
     const alert = await alertManager.getById(req.params.id);
@@ -61,32 +88,6 @@ alertsRouter.put('/:id/dismiss', async (req, res) => {
 alertsRouter.put('/:id/resolve', async (req, res) => {
   try {
     await alertManager.resolve(req.params.id);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
-  }
-});
-
-alertsRouter.put('/batch/read', async (req, res) => {
-  try {
-    const { ids } = req.body;
-    if (!Array.isArray(ids) || ids.length === 0) {
-      res.status(400).json({ error: 'ids must be a non-empty array of strings' }); return;
-    }
-    await alertManager.batchMarkRead(ids);
-    res.json({ success: true });
-  } catch (err) {
-    res.status(500).json({ error: (err as Error).message });
-  }
-});
-
-alertsRouter.put('/batch/dismiss', async (req, res) => {
-  try {
-    const { ids } = req.body;
-    if (!Array.isArray(ids) || ids.length === 0) {
-      res.status(400).json({ error: 'ids must be a non-empty array of strings' }); return;
-    }
-    await alertManager.batchDismiss(ids);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
