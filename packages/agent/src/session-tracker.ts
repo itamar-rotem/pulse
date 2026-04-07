@@ -9,6 +9,7 @@ interface TrackedSession {
   model: string;
   projectSlug: string;
   sessionType: SessionType;
+  status: 'active' | 'paused';
   startedAt: string;
   lastActivityAt: string;
   cumulativeInputTokens: number;
@@ -31,6 +32,7 @@ export class SessionTracker {
         model: msg.model,
         projectSlug: normalizeProjectSlug(msg.cwd),
         sessionType: classifySession({ entrypoint: msg.entrypoint, userType: msg.userType }),
+        status: 'active',
         startedAt: msg.timestamp,
         lastActivityAt: msg.timestamp,
         cumulativeInputTokens: 0,
@@ -88,6 +90,16 @@ export class SessionTracker {
 
   getSession(sessionId: string): TrackedSession | undefined {
     return this.sessions.get(sessionId);
+  }
+
+  pause(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    if (session) session.status = 'paused';
+  }
+
+  resume(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    if (session) session.status = 'active';
   }
 
   markEnded(sessionId: string): void {

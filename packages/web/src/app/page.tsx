@@ -11,6 +11,7 @@ import { ActiveSessions } from '@/components/live/active-sessions';
 import { SessionTable } from '@/components/sessions/session-table';
 import { useLiveSummary, useSessionHistory } from '@/hooks/use-sessions';
 import { useWebSocket } from '@/hooks/use-websocket';
+import { useInsights, dismissInsight, applyInsight } from '@/hooks/use-intelligence';
 
 interface LiveSession {
   sessionId: string;
@@ -45,6 +46,8 @@ export default function DashboardHome() {
   const { connected } = useWebSocket(handleMessage);
   const { data: summary } = useLiveSummary();
   const { data: historyData } = useSessionHistory({ limit: '5' });
+  const { data: insightData } = useInsights({ status: 'ACTIVE', limit: 1 });
+  const latestInsight = insightData?.insights?.[0];
 
   const now = new Date();
   const greeting =
@@ -85,14 +88,14 @@ export default function DashboardHome() {
           totalCacheReadTokens={summary?.totalCacheReadTokens ?? 0}
         />
 
-        {!insightDismissed && (
+        {!insightDismissed && latestInsight && (
           <InsightCard
             icon={Lightbulb}
-            title="High cache hit rate detected"
-            description="Your cache efficiency is above 60% today. Consider enabling prompt caching on long-running agent sessions to reduce costs further."
-            actionLabel="Learn more"
-            onAction={() => {}}
-            onDismiss={() => setInsightDismissed(true)}
+            title={latestInsight.title}
+            description={latestInsight.description}
+            actionLabel={(latestInsight.metadata as Record<string, unknown>).suggestedRule ? 'Apply' : undefined}
+            onAction={(latestInsight.metadata as Record<string, unknown>).suggestedRule ? () => { applyInsight(latestInsight.id); setInsightDismissed(true); } : undefined}
+            onDismiss={() => { dismissInsight(latestInsight.id); setInsightDismissed(true); }}
           />
         )}
 

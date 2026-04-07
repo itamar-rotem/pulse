@@ -1,14 +1,27 @@
 import WebSocket from 'ws';
 import type { TokenEvent } from '@pulse/shared';
 
+export type PauseHandler = (sessionId: string, reason: string) => void;
+export type ResumeHandler = (sessionId: string) => void;
+
 export class TelemetryStreamer {
   private ws: WebSocket | null = null;
   private buffer: unknown[] = [];
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectDelay = 1000;
   private maxReconnectDelay = 30000;
+  private pausedSessions = new Set<string>();
+  private pauseBuffer = new Map<string, unknown[]>();
+  private onPause?: PauseHandler;
+  private onResume?: ResumeHandler;
 
   constructor(private apiUrl: string, private apiKey: string) {}
+
+  /** Register handlers for pause/resume events from the server */
+  setHandlers(onPause: PauseHandler, onResume: ResumeHandler): void {
+    this.onPause = onPause;
+    this.onResume = onResume;
+  }
 
   connect(): void {
     try {
@@ -22,6 +35,15 @@ export class TelemetryStreamer {
         this.flushBuffer();
       });
 
+      this.ws.on('message', (raw) => {
+        try {
+          const msg = JSON.parse(raw.toString());
+          this.handleServerMessage(msg);
+        } catch {
+          // ignore malformed messages
+        }
+      });
+
       this.ws.on('close', () => {
         this.scheduleReconnect();
       });
@@ -31,6 +53,19 @@ export class TelemetryStreamer {
       });
     } catch {
       this.scheduleReconnect();
+    }
+  }
+
+  private handleServerMessage(msg: { type: string; sessionId?: string; reason?: string }): void {
+    if (msg.type === 'session_pause' && msg.sessionId) {
+      this.pausedSessions.add(msg.sessionId);
+      console.log(`Session ${msg.sessionId} paused: ${msg.reason ?? 'no reason'}`);
+      this.onPause?.(msg.sessionId, msg.reason ?? '');
+    } else if (msg.type === 'session_resume' && msg.sessionId) {
+      this.pausedSessions.delete(msg.sessionId);
+      console.log(`Session ${msg.sessionId} resumed`);
+      this.flushPauseBuffer(msg.sessionId);
+      this.onResume?.(msg.sessionId);
     }
   }
 
@@ -46,6 +81,16 @@ export class TelemetryStreamer {
 
   send(type: string, data: unknown): void {
     const message = { type, data };
+
+    // Buffer events for paused sessions instead of sending
+    const sessionId = (data as Record<string, unknown>)?.sessionId as string;
+    if (sessionId && this.pausedSessions.has(sessionId)) {
+      const buf = this.pauseBuffer.get(sessionId) ?? [];
+      buf.push(message);
+      this.pauseBuffer.set(sessionId, buf);
+      return;
+    }
+
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify(message));
     } else {
@@ -63,6 +108,8 @@ export class TelemetryStreamer {
   }
 
   sendSessionEnd(sessionId: string): void {
+    this.pausedSessions.delete(sessionId);
+    this.pauseBuffer.delete(sessionId);
     this.send('session_end', { sessionId });
   }
 
@@ -71,6 +118,23 @@ export class TelemetryStreamer {
       const msg = this.buffer.shift();
       this.ws.send(JSON.stringify(msg));
     }
+  }
+
+  private flushPauseBuffer(sessionId: string): void {
+    const buf = this.pauseBuffer.get(sessionId);
+    if (!buf) return;
+    this.pauseBuffer.delete(sessionId);
+    for (const msg of buf) {
+      if (this.ws?.readyState === WebSocket.OPEN) {
+        this.ws.send(JSON.stringify(msg));
+      } else {
+        this.buffer.push(msg);
+      }
+    }
+  }
+
+  isSessionPaused(sessionId: string): boolean {
+    return this.pausedSessions.has(sessionId);
   }
 
   disconnect(): void {

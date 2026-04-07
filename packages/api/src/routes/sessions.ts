@@ -5,6 +5,8 @@ import {
   endSession,
   getSessionHistory,
   getSessionById,
+  pauseSession,
+  resumeSession,
 } from '../services/session-service.js';
 
 export const sessionsRouter: IRouter = Router();
@@ -52,6 +54,24 @@ sessionsRouter.get('/:id', async (req, res) => {
       res.status(404).json({ error: 'Session not found' });
       return;
     }
+    res.json(session);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+sessionsRouter.post('/:id/pause', async (req, res) => {
+  try {
+    const session = await pauseSession(req.params.id);
+    res.json(session);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+sessionsRouter.post('/:id/resume', async (req, res) => {
+  try {
+    const session = await resumeSession(req.params.id);
     res.json(session);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });

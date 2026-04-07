@@ -34,6 +34,8 @@ export interface Session {
   costUsd: number;
 }
 
+export type { SessionStatus } from './intelligence-types.js';
+
 export interface LiveSummary {
   activeSessions: number;
   totalCostToday: number;

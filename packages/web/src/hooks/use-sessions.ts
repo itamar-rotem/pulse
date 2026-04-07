@@ -12,6 +12,10 @@ interface LiveSummaryData {
   agentCostToday: number;
   humanSessionsToday: number;
   agentSessionsToday: number;
+  totalInputTokens: number;
+  totalOutputTokens: number;
+  totalCacheCreationTokens: number;
+  totalCacheReadTokens: number;
 }
 
 interface SessionHistoryData {
