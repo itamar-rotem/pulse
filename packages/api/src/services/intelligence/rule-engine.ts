@@ -126,6 +126,8 @@ class RuleEngine {
         _sum: { costUsd: true },
       });
       todayCost = result._sum.costUsd ?? 0;
+      // Write back to Redis for subsequent evaluations
+      await redis.set('pulse:daily_cost', todayCost.toString(), 'EX', 86400).catch(() => {});
     }
 
     if (todayCost < maxCost) return null;
@@ -144,26 +146,40 @@ class RuleEngine {
   private async checkCostCapProject(rule: CachedRule, session: SessionContext): Promise<RuleViolation | null> {
     const maxCost = rule.condition.maxCost ?? Infinity;
     const period = rule.condition.period ?? 'daily';
+    const cacheKey = `pulse:project_cost:${session.projectSlug}:${period}`;
 
-    const periodStart = new Date();
-    if (period === 'daily') {
-      periodStart.setUTCHours(0, 0, 0, 0);
-    } else if (period === 'weekly') {
-      periodStart.setUTCDate(periodStart.getUTCDate() - periodStart.getUTCDay());
-      periodStart.setUTCHours(0, 0, 0, 0);
+    let projectCost = 0;
+
+    // Try Redis cache first
+    const cached = await redis.get(cacheKey).catch(() => null);
+    if (cached) {
+      projectCost = parseFloat(cached);
     } else {
-      periodStart.setUTCDate(1);
-      periodStart.setUTCHours(0, 0, 0, 0);
-    }
+      // Fall back to DB aggregation
+      const periodStart = new Date();
+      if (period === 'daily') {
+        periodStart.setUTCHours(0, 0, 0, 0);
+      } else if (period === 'weekly') {
+        periodStart.setUTCDate(periodStart.getUTCDate() - periodStart.getUTCDay());
+        periodStart.setUTCHours(0, 0, 0, 0);
+      } else {
+        periodStart.setUTCDate(1);
+        periodStart.setUTCHours(0, 0, 0, 0);
+      }
 
-    const result = await prisma.session.aggregate({
-      where: {
-        projectSlug: session.projectSlug,
-        startedAt: { gte: periodStart },
-      },
-      _sum: { costUsd: true },
-    });
-    const projectCost = result._sum.costUsd ?? 0;
+      const result = await prisma.session.aggregate({
+        where: {
+          projectSlug: session.projectSlug,
+          startedAt: { gte: periodStart },
+        },
+        _sum: { costUsd: true },
+      });
+      projectCost = result._sum.costUsd ?? 0;
+
+      // Write back to Redis for subsequent evaluations
+      const ttl = period === 'monthly' ? 31 * 86400 : period === 'weekly' ? 7 * 86400 : 86400;
+      await redis.set(cacheKey, projectCost.toString(), 'EX', ttl).catch(() => {});
+    }
 
     if (projectCost < maxCost) return null;
 

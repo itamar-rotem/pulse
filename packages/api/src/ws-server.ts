@@ -113,6 +113,13 @@ async function handleAgentMessage(
     // Update daily cost counter in Redis
     const { redis } = await import('./services/redis.js');
     redis.incrbyfloat('pulse:daily_cost', d.costDeltaUsd as number).catch(() => {});
+    // Increment project cost counter in Redis
+    const projectSlug = d.projectSlug as string;
+    if (projectSlug) {
+      redis.incrbyfloat(`pulse:project_cost:${projectSlug}:daily`, d.costDeltaUsd as number).catch(() => {});
+      redis.incrbyfloat(`pulse:project_cost:${projectSlug}:weekly`, d.costDeltaUsd as number).catch(() => {});
+      redis.incrbyfloat(`pulse:project_cost:${projectSlug}:monthly`, d.costDeltaUsd as number).catch(() => {});
+    }
 
     // Intelligence: evaluate rules + detect anomalies
     const [violations, anomalies] = await Promise.all([
