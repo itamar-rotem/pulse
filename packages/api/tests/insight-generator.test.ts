@@ -31,6 +31,7 @@ vi.mock('../src/services/intelligence/alert-manager.js', () => ({
 }));
 
 import { insightGenerator } from '../src/services/intelligence/insight-generator.js';
+import { alertManager } from '../src/services/intelligence/alert-manager.js';
 
 describe('InsightGenerator', () => {
   beforeEach(() => {
@@ -96,6 +97,62 @@ describe('InsightGenerator', () => {
 
       expect(mockPrisma.insight.create).not.toHaveBeenCalled();
       expect(insights).toHaveLength(0);
+    });
+  });
+
+  describe('applyInsight', () => {
+    it('creates rule from suggestedRule metadata', async () => {
+      mockPrisma.insight.findUnique.mockResolvedValue({
+        id: 'i1',
+        category: 'COST_OPTIMIZATION',
+        title: 'Switch "alpha" to Sonnet',
+        metadata: {
+          suggestedRule: {
+            type: 'MODEL_RESTRICTION',
+            scope: { projectName: 'alpha' },
+            condition: { allowedModels: ['claude-sonnet-4-6'] },
+            action: 'BLOCK',
+          },
+        },
+      });
+      mockPrisma.rule.create.mockResolvedValue({ id: 'rule-1' });
+      mockPrisma.insight.update.mockResolvedValue({ id: 'i1', status: 'APPLIED' });
+
+      const result = await insightGenerator.applyInsight('i1');
+
+      expect(result.ruleId).toBe('rule-1');
+      expect(mockPrisma.rule.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          name: 'Auto: Switch "alpha" to Sonnet',
+          type: 'MODEL_RESTRICTION',
+        }),
+      });
+    });
+
+    it('throws when suggestedRule has missing fields', async () => {
+      mockPrisma.insight.findUnique.mockResolvedValue({
+        id: 'i2',
+        category: 'COST_OPTIMIZATION',
+        title: 'Broken insight',
+        metadata: { suggestedRule: { type: 'MODEL_RESTRICTION' } },
+      });
+
+      await expect(insightGenerator.applyInsight('i2')).rejects.toThrow('missing required fields');
+    });
+  });
+
+  describe('weeklyDigest', () => {
+    it('creates digest insight and alert', async () => {
+      mockPrisma.session.aggregate.mockResolvedValue({ _sum: { costUsd: 450 }, _count: 85 });
+      mockPrisma.alert.count.mockResolvedValue(12);
+      mockPrisma.insight.create.mockImplementation((args: any) => Promise.resolve({ id: 'digest-1', ...args.data }));
+
+      const insight = await insightGenerator.weeklyDigest();
+
+      expect(insight).toBeDefined();
+      expect(insight!.title).toContain('85 sessions');
+      expect(insight!.title).toContain('$450');
+      expect(alertManager.create).toHaveBeenCalled();
     });
   });
 });

@@ -120,6 +120,79 @@ describe('WebhookService', () => {
     });
   });
 
+  describe('retry logic', () => {
+    it('retries on 5xx and succeeds on second attempt', async () => {
+      vi.useFakeTimers();
+
+      mockPrisma.webhook.findMany.mockResolvedValue([
+        { id: 'wh-1', url: 'https://hooks.example.com/test', secret: null, events: ['ANOMALY'], enabled: true, failCount: 0 },
+      ]);
+      mockFetch
+        .mockResolvedValueOnce({ ok: false, status: 500 })
+        .mockResolvedValueOnce({ ok: true, status: 200 });
+      mockPrisma.webhook.update.mockResolvedValue({});
+
+      await webhookService.dispatch({
+        id: 'a1', type: 'ANOMALY', severity: 'WARNING', title: 'T', message: 'M', metadata: {}, status: 'ACTIVE', createdAt: new Date().toISOString(),
+      } as any);
+
+      await vi.runAllTimersAsync();
+
+      vi.useRealTimers();
+
+      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockPrisma.webhook.update).toHaveBeenCalledWith({
+        where: { id: 'wh-1' },
+        data: expect.objectContaining({ failCount: 0 }),
+      });
+    });
+
+    it('does not retry on 4xx errors', async () => {
+      vi.useFakeTimers();
+
+      mockPrisma.webhook.findMany.mockResolvedValue([
+        { id: 'wh-1', url: 'https://hooks.example.com/test', secret: null, events: ['ANOMALY'], enabled: true, failCount: 0 },
+      ]);
+      mockFetch.mockResolvedValue({ ok: false, status: 400 });
+      mockPrisma.webhook.update.mockResolvedValue({});
+
+      await webhookService.dispatch({
+        id: 'a1', type: 'ANOMALY', severity: 'WARNING', title: 'T', message: 'M', metadata: {}, status: 'ACTIVE', createdAt: new Date().toISOString(),
+      } as any);
+
+      await vi.runAllTimersAsync();
+
+      vi.useRealTimers();
+
+      expect(mockFetch).toHaveBeenCalledTimes(1);
+      expect(mockPrisma.webhook.update).toHaveBeenCalledWith({
+        where: { id: 'wh-1' },
+        data: expect.objectContaining({ failCount: { increment: 1 }, lastError: 'HTTP 400' }),
+      });
+    });
+
+    it('increments failCount only after all retries exhausted', async () => {
+      vi.useFakeTimers();
+
+      mockPrisma.webhook.findMany.mockResolvedValue([
+        { id: 'wh-1', url: 'https://hooks.example.com/test', secret: null, events: ['ANOMALY'], enabled: true, failCount: 0 },
+      ]);
+      mockFetch.mockRejectedValue(new Error('Connection refused'));
+      mockPrisma.webhook.update.mockResolvedValue({});
+
+      await webhookService.dispatch({
+        id: 'a1', type: 'ANOMALY', severity: 'WARNING', title: 'T', message: 'M', metadata: {}, status: 'ACTIVE', createdAt: new Date().toISOString(),
+      } as any);
+
+      await vi.runAllTimersAsync();
+
+      vi.useRealTimers();
+
+      expect(mockFetch).toHaveBeenCalledTimes(3);
+      expect(mockPrisma.webhook.update).toHaveBeenCalledTimes(1);
+    });
+  });
+
   describe('test', () => {
     it('sends test payload and returns success', async () => {
       mockPrisma.webhook.findUnique.mockResolvedValue({

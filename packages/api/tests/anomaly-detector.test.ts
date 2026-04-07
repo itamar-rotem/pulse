@@ -88,4 +88,31 @@ describe('AnomalyDetector', () => {
       expect(velocity!.severity).toBe('WARNING');
     });
   });
+
+  describe('abnormal termination cluster', () => {
+    it('fires CRITICAL after 3+ abnormal terminations in 1 hour', () => {
+      anomalyDetector.checkAbnormalTerminations('s1', 'error');
+      anomalyDetector.checkAbnormalTerminations('s2', 'timeout');
+      const result = anomalyDetector.checkAbnormalTerminations('s3', 'crash');
+
+      expect(result).toBeDefined();
+      expect(result!.type).toBe('abnormal_termination_cluster');
+      expect(result!.severity).toBe('CRITICAL');
+    });
+
+    it('does not fire for normal terminations', () => {
+      anomalyDetector.checkAbnormalTerminations('s1', 'completed');
+      anomalyDetector.checkAbnormalTerminations('s2', 'user_stopped');
+      const result = anomalyDetector.checkAbnormalTerminations('s3', 'completed');
+
+      expect(result).toBeNull();
+    });
+
+    it('does not fire with only 2 abnormal terminations', () => {
+      anomalyDetector.checkAbnormalTerminations('s1', 'error');
+      const result = anomalyDetector.checkAbnormalTerminations('s2', 'crash');
+
+      expect(result).toBeNull();
+    });
+  });
 });

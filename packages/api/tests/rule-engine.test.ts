@@ -147,4 +147,78 @@ describe('RuleEngine', () => {
       expect(violations).toHaveLength(0);
     });
   });
+
+  describe('evaluate — COST_CAP_DAILY', () => {
+    it('detects violation using Redis cached value', async () => {
+      ruleEngine._setRulesForTest([
+        { id: 'r5', name: 'Daily cap', type: 'COST_CAP_DAILY', scope: { global: true }, condition: { maxCost: 200 }, action: 'ALERT', enabled: true },
+      ]);
+      mockRedis.get.mockResolvedValue('250');
+
+      const violations = await ruleEngine.evaluate(
+        { sessionId: 's1', burnRatePerMin: 1000, model: 'claude-sonnet-4-6' } as any,
+        { id: 's1', costUsd: 10, projectSlug: 'proj', sessionType: 'human', startedAt: new Date() } as any,
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].ruleType).toBe('COST_CAP_DAILY');
+      expect(violations[0].severity).toBe('CRITICAL'); // 250 > 200*1.1
+    });
+
+    it('falls back to DB when Redis cache misses', async () => {
+      ruleEngine._setRulesForTest([
+        { id: 'r5', name: 'Daily cap', type: 'COST_CAP_DAILY', scope: { global: true }, condition: { maxCost: 100 }, action: 'ALERT', enabled: true },
+      ]);
+      mockRedis.get.mockResolvedValue(null);
+      mockRedis.set.mockResolvedValue('OK');
+      mockPrisma.session.aggregate.mockResolvedValue({ _sum: { costUsd: 150 } });
+
+      const violations = await ruleEngine.evaluate(
+        { sessionId: 's1', burnRatePerMin: 1000, model: 'claude-sonnet-4-6' } as any,
+        { id: 's1', costUsd: 10, projectSlug: 'proj', sessionType: 'human', startedAt: new Date() } as any,
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(mockPrisma.session.aggregate).toHaveBeenCalled();
+    });
+  });
+
+  describe('evaluate — COST_CAP_PROJECT', () => {
+    it('detects violation using Redis cached value', async () => {
+      ruleEngine._setRulesForTest([
+        { id: 'r6', name: 'Project cap', type: 'COST_CAP_PROJECT', scope: { projectName: 'alpha' }, condition: { maxCost: 500, period: 'monthly' }, action: 'ALERT', enabled: true },
+      ]);
+      mockRedis.get.mockResolvedValue('600');
+
+      const violations = await ruleEngine.evaluate(
+        { sessionId: 's1', burnRatePerMin: 1000, model: 'claude-sonnet-4-6' } as any,
+        { id: 's1', costUsd: 10, projectSlug: 'alpha', sessionType: 'human', startedAt: new Date() } as any,
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(violations[0].ruleType).toBe('COST_CAP_PROJECT');
+    });
+
+    it('falls back to DB and writes back to Redis on cache miss', async () => {
+      ruleEngine._setRulesForTest([
+        { id: 'r6', name: 'Project cap', type: 'COST_CAP_PROJECT', scope: { projectName: 'alpha' }, condition: { maxCost: 500, period: 'weekly' }, action: 'ALERT', enabled: true },
+      ]);
+      mockRedis.get.mockResolvedValue(null);
+      mockRedis.set.mockResolvedValue('OK');
+      mockPrisma.session.aggregate.mockResolvedValue({ _sum: { costUsd: 600 } });
+
+      const violations = await ruleEngine.evaluate(
+        { sessionId: 's1', burnRatePerMin: 1000, model: 'claude-sonnet-4-6' } as any,
+        { id: 's1', costUsd: 10, projectSlug: 'alpha', sessionType: 'human', startedAt: new Date() } as any,
+      );
+
+      expect(violations).toHaveLength(1);
+      expect(mockRedis.set).toHaveBeenCalledWith(
+        'pulse:project_cost:alpha:weekly',
+        '600',
+        'EX',
+        7 * 86400,
+      );
+    });
+  });
 });
