@@ -16,6 +16,7 @@ const EWMA_ALPHA = 0.1; // smoothing factor
 class AnomalyDetector {
   private baselineStats = new Map<string, RunningStats>();
   private sessionHistory = new Map<string, SessionEventHistory>();
+  private abnormalTerminations: { timestamp: number; sessionId: string }[] = [];
 
   async check(
     event: { sessionId: string; burnRatePerMin: number; inputTokens: number; outputTokens: number; cacheReadTokens: number; costDeltaUsd?: number; cumulativeCostUsd?: number },
@@ -202,10 +203,46 @@ class AnomalyDetector {
     this.sessionHistory.delete(sessionId);
   }
 
+  /** Check for abnormal termination cluster. Called on session_end. */
+  checkAbnormalTerminations(sessionId: string, endReason?: string): Anomaly | null {
+    // Only track non-normal endings
+    const normalReasons = ['completed', 'user_stopped'];
+    if (endReason && normalReasons.includes(endReason)) return null;
+    // If no endReason provided, treat as abnormal (unexpected disconnect)
+
+    const now = Date.now();
+    const oneHourAgo = now - 60 * 60 * 1000;
+
+    // Add this termination
+    this.abnormalTerminations.push({ timestamp: now, sessionId });
+
+    // Prune entries older than 1 hour
+    this.abnormalTerminations = this.abnormalTerminations.filter((t) => t.timestamp > oneHourAgo);
+
+    // Check threshold: 3+ abnormal terminations in 1 hour
+    if (this.abnormalTerminations.length >= 3) {
+      const sessionIds = this.abnormalTerminations.map((t) => t.sessionId);
+      // Reset to avoid repeated firing
+      this.abnormalTerminations = [];
+
+      return {
+        type: 'abnormal_termination_cluster',
+        severity: 'CRITICAL',
+        title: 'Abnormal termination cluster detected',
+        message: `${sessionIds.length} sessions ended abnormally within 1 hour`,
+        sessionId,
+        metadata: { sessionIds, count: sessionIds.length },
+      };
+    }
+
+    return null;
+  }
+
   /** Test helper */
   _resetForTest(): void {
     this.baselineStats.clear();
     this.sessionHistory.clear();
+    this.abnormalTerminations = [];
   }
 }
 

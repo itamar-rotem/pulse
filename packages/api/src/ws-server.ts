@@ -164,8 +164,23 @@ async function handleAgentMessage(
     }
   } else if (msg.type === 'session_end') {
     const sessionId = msg.data.sessionId as string;
+    const endReason = msg.data.endReason as string | undefined;
     sessionRegistry.delete(sessionId);
     anomalyDetector.clearSession(sessionId);
+
+    // Check for abnormal termination cluster
+    const termAnomaly = anomalyDetector.checkAbnormalTerminations(sessionId, endReason);
+    if (termAnomaly) {
+      await alertManager.create({
+        type: 'ANOMALY',
+        severity: termAnomaly.severity,
+        title: termAnomaly.title,
+        message: termAnomaly.message,
+        sessionId: termAnomaly.sessionId,
+        metadata: termAnomaly.metadata,
+      }).catch(() => {});
+    }
+
     await endSession(sessionId);
   }
 }
