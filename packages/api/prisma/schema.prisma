@@ -90,8 +90,8 @@ model Session {
   cacheCreationTokens Int           @default(0) @map("cache_creation_tokens")
   cacheReadTokens     Int           @default(0) @map("cache_read_tokens")
   costUsd             Float         @default(0) @map("cost_usd")
-  orgId               String?       @map("org_id")
-  org                 Organization? @relation(fields: [orgId], references: [id])
+  orgId               String        @map("org_id")
+  org                 Organization  @relation(fields: [orgId], references: [id])
   tokenEvents         TokenEvent[]
   alerts              Alert[]
 
@@ -122,8 +122,8 @@ model TokenEvent {
   cumulativeOutputTokens Int           @map("cumulative_output_tokens")
   cumulativeCostUsd      Float         @map("cumulative_cost_usd")
   burnRatePerMin         Float         @map("burn_rate_per_min")
-  orgId                  String?       @map("org_id")
-  org                    Organization? @relation(fields: [orgId], references: [id])
+  orgId                  String        @map("org_id")
+  org                    Organization  @relation(fields: [orgId], references: [id])
 
   session Session @relation(fields: [sessionId], references: [id])
 
@@ -145,8 +145,8 @@ model Rule {
   triggerCount    Int        @default(0) @map("trigger_count")
   createdAt       DateTime   @default(now()) @map("created_at")
   updatedAt       DateTime   @updatedAt @map("updated_at")
-  orgId           String?    @map("org_id")
-  org             Organization? @relation(fields: [orgId], references: [id])
+  orgId           String     @map("org_id")
+  org             Organization @relation(fields: [orgId], references: [id])
   alerts          Alert[]
 
   @@index([orgId])
@@ -185,8 +185,8 @@ model Alert {
   createdAt   DateTime      @default(now()) @map("created_at")
   readAt      DateTime?     @map("read_at")
   dismissedAt DateTime?     @map("dismissed_at")
-  orgId       String?       @map("org_id")
-  org         Organization? @relation(fields: [orgId], references: [id])
+  orgId       String        @map("org_id")
+  org         Organization  @relation(fields: [orgId], references: [id])
 
   @@index([status])
   @@index([type])
@@ -228,8 +228,8 @@ model Insight {
   createdAt   DateTime        @default(now()) @map("created_at")
   dismissedAt DateTime?       @map("dismissed_at")
   appliedAt   DateTime?       @map("applied_at")
-  orgId       String?         @map("org_id")
-  org         Organization?   @relation(fields: [orgId], references: [id])
+  orgId       String          @map("org_id")
+  org         Organization    @relation(fields: [orgId], references: [id])
 
   @@index([status])
   @@index([category])
@@ -262,8 +262,8 @@ model Webhook {
   updatedAt  DateTime      @updatedAt @map("updated_at")
   lastError  String?       @map("last_error")
   lastSentAt DateTime?     @map("last_sent_at")
-  orgId      String?       @map("org_id")
-  org        Organization? @relation(fields: [orgId], references: [id])
+  orgId      String        @map("org_id")
+  org        Organization  @relation(fields: [orgId], references: [id])
 
   @@index([orgId])
   @@map("webhooks")
