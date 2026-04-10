@@ -51,7 +51,7 @@ insightsRouter.put('/:id/dismiss', requireRole('OWNER', 'ADMIN'), async (req, re
 insightsRouter.put('/:id/apply', requireRole('OWNER', 'ADMIN'), async (req, res) => {
   try {
     const id = req.params.id as string;
-    const result = await insightGenerator.applyInsight(id);
+    const result = await insightGenerator.applyInsight(id, req.prisma!);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });

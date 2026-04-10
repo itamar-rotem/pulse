@@ -96,7 +96,7 @@ webhooksRouter.delete('/:id', requireRole('OWNER', 'ADMIN'), async (req, res) =>
 webhooksRouter.post('/:id/test', requireRole('OWNER', 'ADMIN'), async (req, res) => {
   try {
     const id = req.params.id as string;
-    const result = await webhookService.test(id);
+    const result = await webhookService.test(id, req.prisma!);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });

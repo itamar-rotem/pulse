@@ -1,5 +1,5 @@
 import { createHmac } from 'crypto';
-import { prisma } from '../prisma.js';
+import type { PrismaClient } from '@prisma/client';
 import type { Alert } from '@pulse/shared';
 
 const MAX_FAIL_COUNT = 5;
@@ -7,8 +7,8 @@ const RETRY_DELAYS = [1000, 5000, 30000]; // 1s, 5s, 30s
 const MAX_ATTEMPTS = 3;
 
 class WebhookService {
-  async dispatch(alert: Alert): Promise<void> {
-    const webhooks = await prisma.webhook.findMany({
+  async dispatch(alert: Alert, db: PrismaClient): Promise<void> {
+    const webhooks = await db.webhook.findMany({
       where: {
         enabled: true,
         events: { has: alert.type },
@@ -17,13 +17,14 @@ class WebhookService {
 
     for (const wh of webhooks) {
       // Fire-and-forget: don't await delivery
-      this.deliverWithRetry(wh, alert).catch(() => {});
+      this.deliverWithRetry(wh, alert, db).catch(() => {});
     }
   }
 
   private async deliverWithRetry(
     webhook: { id: string; url: string; secret: string | null; failCount: number },
     alert: Alert,
+    db: PrismaClient,
   ): Promise<void> {
     const payload = this.buildPayload(alert);
     const headers = this.buildHeaders(payload, webhook.secret);
@@ -39,7 +40,7 @@ class WebhookService {
 
         if (res.ok) {
           // Success — reset failure tracking
-          await prisma.webhook.update({
+          await db.webhook.update({
             where: { id: webhook.id },
             data: { lastSentAt: new Date(), failCount: 0, lastError: null },
           });
@@ -48,7 +49,7 @@ class WebhookService {
 
         // 4xx = client error, don't retry
         if (res.status >= 400 && res.status < 500) {
-          await this.recordFailure(webhook, `HTTP ${res.status}`);
+          await this.recordFailure(webhook, `HTTP ${res.status}`, db);
           return;
         }
 
@@ -59,7 +60,7 @@ class WebhookService {
         }
 
         // Final attempt failed
-        await this.recordFailure(webhook, `HTTP ${res.status}`);
+        await this.recordFailure(webhook, `HTTP ${res.status}`, db);
       } catch (err) {
         // Network error — retry if attempts remain
         if (attempt < MAX_ATTEMPTS) {
@@ -68,7 +69,7 @@ class WebhookService {
         }
 
         // Final attempt failed
-        await this.recordFailure(webhook, (err as Error).message);
+        await this.recordFailure(webhook, (err as Error).message, db);
       }
     }
   }
@@ -101,9 +102,10 @@ class WebhookService {
   private async recordFailure(
     webhook: { id: string; failCount: number },
     error: string,
+    db: PrismaClient,
   ): Promise<void> {
     const newFailCount = webhook.failCount + 1;
-    await prisma.webhook.update({
+    await db.webhook.update({
       where: { id: webhook.id },
       data: {
         failCount: { increment: 1 },
@@ -117,8 +119,11 @@ class WebhookService {
     return new Promise((resolve) => setTimeout(resolve, ms));
   }
 
-  async test(webhookId: string): Promise<{ success: boolean; statusCode?: number; error?: string }> {
-    const webhook = await prisma.webhook.findUnique({ where: { id: webhookId } });
+  async test(
+    webhookId: string,
+    db: PrismaClient,
+  ): Promise<{ success: boolean; statusCode?: number; error?: string }> {
+    const webhook = await db.webhook.findUnique({ where: { id: webhookId } });
     if (!webhook) return { success: false, error: 'Webhook not found' };
 
     const payload = JSON.stringify({

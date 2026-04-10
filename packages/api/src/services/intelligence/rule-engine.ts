@@ -1,9 +1,10 @@
 import { redis } from '../redis.js';
-import type { RuleViolation, RuleScope, RuleCondition, Severity, RuleAction, RuleType } from '@pulse/shared';
-import { prisma } from '../prisma.js';
+import type { RuleViolation, RuleScope, RuleCondition, RuleAction, RuleType } from '@pulse/shared';
+import { prisma as globalPrisma } from '../prisma.js';
 
 interface CachedRule {
   id: string;
+  orgId: string;
   name: string;
   type: RuleType;
   scope: RuleScope;
@@ -27,28 +28,41 @@ interface EventContext {
 }
 
 class RuleEngine {
-  private rules: CachedRule[] = [];
+  private rulesByOrg: Map<string, CachedRule[]> = new Map();
   private violationTimers = new Map<string, number>(); // ruleId:sessionId → timestamp ms
 
   /** Refresh rules from database. Called by scheduler every 60s. */
   async refreshCache(): Promise<void> {
-    const dbRules = await prisma.rule.findMany({ where: { enabled: true } });
-    this.rules = dbRules.map((r) => ({
-      id: r.id,
-      name: r.name,
-      type: r.type as RuleType,
-      scope: r.scope as unknown as RuleScope,
-      condition: r.condition as unknown as RuleCondition,
-      action: r.action as RuleAction,
-      enabled: r.enabled,
-    }));
+    const dbRules = await globalPrisma.rule.findMany({ where: { enabled: true } });
+    const byOrg = new Map<string, CachedRule[]>();
+    for (const r of dbRules) {
+      const cached: CachedRule = {
+        id: r.id,
+        orgId: r.orgId,
+        name: r.name,
+        type: r.type as RuleType,
+        scope: r.scope as unknown as RuleScope,
+        condition: r.condition as unknown as RuleCondition,
+        action: r.action as RuleAction,
+        enabled: r.enabled,
+      };
+      const list = byOrg.get(r.orgId) ?? [];
+      list.push(cached);
+      byOrg.set(r.orgId, list);
+    }
+    this.rulesByOrg = byOrg;
   }
 
-  /** Evaluate all rules against a token event + session state. */
-  async evaluate(event: EventContext, session: SessionContext): Promise<RuleViolation[]> {
+  /** Evaluate all rules for an org against a token event + session state. */
+  async evaluate(
+    event: EventContext,
+    session: SessionContext,
+    orgId: string,
+  ): Promise<RuleViolation[]> {
     const violations: RuleViolation[] = [];
+    const rules = this.rulesByOrg.get(orgId) ?? [];
 
-    for (const rule of this.rules) {
+    for (const rule of rules) {
       if (!this.matchesScope(rule.scope, session, event)) continue;
 
       const violation = await this.evaluateRule(rule, event, session);
@@ -112,22 +126,23 @@ class RuleEngine {
 
   private async checkCostCapDaily(rule: CachedRule): Promise<RuleViolation | null> {
     const maxCost = rule.condition.maxCost ?? Infinity;
+    const cacheKey = `pulse:daily_cost:${rule.orgId}`;
 
     // Try Redis cache first, fall back to DB
     let todayCost = 0;
-    const cached = await redis.get('pulse:daily_cost').catch(() => null);
+    const cached = await redis.get(cacheKey).catch(() => null);
     if (cached) {
       todayCost = parseFloat(cached);
     } else {
       const todayStart = new Date();
       todayStart.setUTCHours(0, 0, 0, 0);
-      const result = await prisma.session.aggregate({
-        where: { startedAt: { gte: todayStart } },
+      const result = await globalPrisma.session.aggregate({
+        where: { orgId: rule.orgId, startedAt: { gte: todayStart } },
         _sum: { costUsd: true },
       });
       todayCost = result._sum.costUsd ?? 0;
       // Write back to Redis for subsequent evaluations
-      await redis.set('pulse:daily_cost', todayCost.toString(), 'EX', 86400).catch(() => {});
+      await redis.set(cacheKey, todayCost.toString(), 'EX', 86400).catch(() => {});
     }
 
     if (todayCost < maxCost) return null;
@@ -146,7 +161,7 @@ class RuleEngine {
   private async checkCostCapProject(rule: CachedRule, session: SessionContext): Promise<RuleViolation | null> {
     const maxCost = rule.condition.maxCost ?? Infinity;
     const period = rule.condition.period ?? 'daily';
-    const cacheKey = `pulse:project_cost:${session.projectSlug}:${period}`;
+    const cacheKey = `pulse:project_cost:${rule.orgId}:${session.projectSlug}:${period}`;
 
     let projectCost = 0;
 
@@ -167,8 +182,9 @@ class RuleEngine {
         periodStart.setUTCHours(0, 0, 0, 0);
       }
 
-      const result = await prisma.session.aggregate({
+      const result = await globalPrisma.session.aggregate({
         where: {
+          orgId: rule.orgId,
           projectSlug: session.projectSlug,
           startedAt: { gte: periodStart },
         },
@@ -267,9 +283,15 @@ class RuleEngine {
     };
   }
 
-  /** Test helper: inject rules without DB */
-  _setRulesForTest(rules: CachedRule[]): void {
-    this.rules = rules;
+  /** Test helper: inject rules for a specific org without DB */
+  _setRulesForTest(orgId: string, rules: CachedRule[]): void {
+    this.rulesByOrg.set(orgId, rules);
+    this.violationTimers.clear();
+  }
+
+  /** Test helper: clear all cached rules */
+  _clearRulesForTest(): void {
+    this.rulesByOrg.clear();
     this.violationTimers.clear();
   }
 }

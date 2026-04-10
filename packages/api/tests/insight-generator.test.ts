@@ -1,7 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createHash } from 'crypto';
 
 const mockPrisma = vi.hoisted(() => ({
+  organization: {
+    findMany: vi.fn(),
+  },
   session: {
     findMany: vi.fn(),
     aggregate: vi.fn(),
@@ -26,6 +28,10 @@ vi.mock('../src/services/prisma.js', () => ({
   prisma: mockPrisma,
 }));
 
+vi.mock('../src/services/tenant-prisma.js', () => ({
+  createTenantPrisma: () => mockPrisma,
+}));
+
 vi.mock('../src/services/intelligence/alert-manager.js', () => ({
   alertManager: { create: vi.fn() },
 }));
@@ -33,9 +39,13 @@ vi.mock('../src/services/intelligence/alert-manager.js', () => ({
 import { insightGenerator } from '../src/services/intelligence/insight-generator.js';
 import { alertManager } from '../src/services/intelligence/alert-manager.js';
 
+const db = mockPrisma as any;
+
 describe('InsightGenerator', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Default: one org for analyze() to iterate
+    mockPrisma.organization.findMany.mockResolvedValue([{ id: 'org-1' }]);
     // Default: findMany returns empty array (analyzePeakUsage needs < 10 sessions to short-circuit)
     mockPrisma.session.findMany.mockResolvedValue([]);
   });
@@ -118,7 +128,7 @@ describe('InsightGenerator', () => {
       mockPrisma.rule.create.mockResolvedValue({ id: 'rule-1' });
       mockPrisma.insight.update.mockResolvedValue({ id: 'i1', status: 'APPLIED' });
 
-      const result = await insightGenerator.applyInsight('i1');
+      const result = await insightGenerator.applyInsight('i1', db);
 
       expect(result.ruleId).toBe('rule-1');
       expect(mockPrisma.rule.create).toHaveBeenCalledWith({
@@ -137,7 +147,7 @@ describe('InsightGenerator', () => {
         metadata: { suggestedRule: { type: 'MODEL_RESTRICTION' } },
       });
 
-      await expect(insightGenerator.applyInsight('i2')).rejects.toThrow('missing required fields');
+      await expect(insightGenerator.applyInsight('i2', db)).rejects.toThrow('missing required fields');
     });
   });
 
@@ -247,8 +257,10 @@ describe('InsightGenerator', () => {
       mockPrisma.alert.count.mockResolvedValue(12);
       mockPrisma.insight.create.mockImplementation((args: any) => Promise.resolve({ id: 'digest-1', ...args.data }));
 
-      const insight = await insightGenerator.weeklyDigest();
+      const results = await insightGenerator.weeklyDigest();
 
+      expect(results).toHaveLength(1);
+      const insight = results[0];
       expect(insight).toBeDefined();
       expect(insight!.title).toContain('85 sessions');
       expect(insight!.title).toContain('$450');

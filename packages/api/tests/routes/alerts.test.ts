@@ -49,7 +49,7 @@ describe('Alerts route validation', () => {
 
       const res = await request(app).put('/alerts/batch/read').send({ ids: ['a1', 'a2'] });
       expect(res.status).toBe(200);
-      expect(mockAlertManager.batchMarkRead).toHaveBeenCalledWith(['a1', 'a2']);
+      expect(mockAlertManager.batchMarkRead).toHaveBeenCalledWith(['a1', 'a2'], undefined);
     });
   });
 
@@ -66,7 +66,7 @@ describe('Alerts route validation', () => {
 
       const res = await request(app).put('/alerts/batch/dismiss').send({ ids: ['a1'] });
       expect(res.status).toBe(200);
-      expect(mockAlertManager.batchDismiss).toHaveBeenCalledWith(['a1']);
+      expect(mockAlertManager.batchDismiss).toHaveBeenCalledWith(['a1'], undefined);
     });
   });
 });

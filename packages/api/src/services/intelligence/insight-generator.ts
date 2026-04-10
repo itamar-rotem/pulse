@@ -1,7 +1,9 @@
 import { createHash } from 'crypto';
+import type { PrismaClient } from '@prisma/client';
 import { alertManager } from './alert-manager.js';
-import type { Insight, InsightCategory } from '@pulse/shared';
-import { prisma } from '../prisma.js';
+import type { Insight } from '@pulse/shared';
+import { prisma as globalPrisma } from '../prisma.js';
+import { createTenantPrisma } from '../tenant-prisma.js';
 import type { RuleType, RuleAction } from '@prisma/client';
 
 function dedupKey(category: string, identifiers: Record<string, unknown>): string {
@@ -11,35 +13,43 @@ function dedupKey(category: string, identifiers: Record<string, unknown>): strin
 }
 
 class InsightGenerator {
-  /** Run all analyses. Called every 5 minutes by scheduler. */
+  /** Run all analyses across all orgs. Called every 5 minutes by scheduler. */
   async analyze(): Promise<Insight[]> {
+    const orgs = await globalPrisma.organization.findMany({ select: { id: true } });
+    const all: Insight[] = [];
+
+    for (const org of orgs) {
+      const db = createTenantPrisma(org.id);
+      const orgInsights = await this.analyzeForOrg(org.id, db).catch((e) => {
+        console.error(`Insight analysis failed for org ${org.id}:`, e);
+        return [] as Insight[];
+      });
+      all.push(...orgInsights);
+    }
+
+    return all;
+  }
+
+  /** Run all analyses for a single tenant. */
+  private async analyzeForOrg(_orgId: string, db: PrismaClient): Promise<Insight[]> {
     const insights: Insight[] = [];
 
-    const modelOptInsights = await this.analyzeModelOptimization();
-    insights.push(...modelOptInsights);
-
-    const spendInsights = await this.analyzeSpendDistribution();
-    insights.push(...spendInsights);
-
-    const costTrendInsights = await this.analyzeCostTrends();
-    insights.push(...costTrendInsights);
-
-    const peakInsights = await this.analyzePeakUsage();
-    insights.push(...peakInsights);
-
-    const planInsights = await this.analyzePlanRecommendation();
-    insights.push(...planInsights);
+    insights.push(...await this.analyzeModelOptimization(db));
+    insights.push(...await this.analyzeSpendDistribution(db));
+    insights.push(...await this.analyzeCostTrends(db));
+    insights.push(...await this.analyzePeakUsage(db));
+    insights.push(...await this.analyzePlanRecommendation(db));
 
     return insights;
   }
 
   /** Detect sessions using expensive models for simple tasks */
-  private async analyzeModelOptimization(): Promise<Insight[]> {
+  private async analyzeModelOptimization(db: PrismaClient): Promise<Insight[]> {
     const insights: Insight[] = [];
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     // Find projects using opus-class models with low avg output
-    const projectStats = await prisma.session.groupBy({
+    const projectStats = await db.session.groupBy({
       by: ['projectSlug'],
       where: {
         model: { contains: 'opus' },
@@ -58,7 +68,7 @@ class InsightGenerator {
       const estimatedSavings = (stat._sum.costUsd ?? 0) * 0.6; // Sonnet is ~60% cheaper
       const key = dedupKey('COST_OPTIMIZATION', { projectName: stat.projectSlug, suggestion: 'downgrade_model' });
 
-      const existing = await prisma.insight.findFirst({
+      const existing = await db.insight.findFirst({
         where: {
           dedupKey: key,
           status: 'ACTIVE',
@@ -67,7 +77,8 @@ class InsightGenerator {
       });
       if (existing) continue;
 
-      const insight = await prisma.insight.create({
+      const insight = await db.insight.create({
+        // orgId auto-injected by tenant-scoped client
         data: {
           category: 'COST_OPTIMIZATION',
           title: `Switch "${stat.projectSlug}" to Sonnet`,
@@ -85,7 +96,7 @@ class InsightGenerator {
             },
           },
           dedupKey: key,
-        },
+        } as any,
       });
 
       insights.push(insight as unknown as Insight);
@@ -95,11 +106,11 @@ class InsightGenerator {
   }
 
   /** Detect dominant project spending */
-  private async analyzeSpendDistribution(): Promise<Insight[]> {
+  private async analyzeSpendDistribution(db: PrismaClient): Promise<Insight[]> {
     const insights: Insight[] = [];
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const projectSpend = await prisma.session.groupBy({
+    const projectSpend = await db.session.groupBy({
       by: ['projectSlug'],
       where: { startedAt: { gte: sevenDaysAgo } },
       _sum: { costUsd: true },
@@ -114,7 +125,7 @@ class InsightGenerator {
       if (percentage < 0.5) continue; // Only flag >50% concentration
 
       const key = dedupKey('USAGE_PATTERN', { topProject: project.projectSlug });
-      const existing = await prisma.insight.findFirst({
+      const existing = await db.insight.findFirst({
         where: {
           dedupKey: key,
           status: 'ACTIVE',
@@ -123,7 +134,8 @@ class InsightGenerator {
       });
       if (existing) continue;
 
-      const insight = await prisma.insight.create({
+      const insight = await db.insight.create({
+        // orgId auto-injected by tenant-scoped client
         data: {
           category: 'USAGE_PATTERN',
           title: `"${project.projectSlug}" accounts for ${Math.round(percentage * 100)}% of spend`,
@@ -131,7 +143,7 @@ class InsightGenerator {
           impact: { percentChange: Math.round(percentage * 100) },
           metadata: { projectName: project.projectSlug, cost, totalSpend, percentage },
           dedupKey: key,
-        },
+        } as any,
       });
 
       insights.push(insight as unknown as Insight);
@@ -141,7 +153,7 @@ class InsightGenerator {
   }
 
   /** Detect week-over-week cost trend changes */
-  private async analyzeCostTrends(): Promise<Insight[]> {
+  private async analyzeCostTrends(db: PrismaClient): Promise<Insight[]> {
     const insights: Insight[] = [];
 
     const now = new Date();
@@ -151,12 +163,12 @@ class InsightGenerator {
     lastWeekStart.setUTCDate(lastWeekStart.getUTCDate() - 7);
 
     const [thisWeek, lastWeek] = await Promise.all([
-      prisma.session.aggregate({
+      db.session.aggregate({
         where: { startedAt: { gte: thisWeekStart } },
         _avg: { costUsd: true },
         _count: true,
       }),
-      prisma.session.aggregate({
+      db.session.aggregate({
         where: { startedAt: { gte: lastWeekStart, lt: thisWeekStart } },
         _avg: { costUsd: true },
         _count: true,
@@ -170,7 +182,7 @@ class InsightGenerator {
       const change = (thisAvg - lastAvg) / lastAvg;
       if (change >= 0.25) {
         const key = dedupKey('USAGE_PATTERN', { trend: 'cost_increase_weekly' });
-        const existing = await prisma.insight.findFirst({
+        const existing = await db.insight.findFirst({
           where: {
             dedupKey: key,
             status: 'ACTIVE',
@@ -179,7 +191,8 @@ class InsightGenerator {
         });
 
         if (!existing) {
-          const insight = await prisma.insight.create({
+          const insight = await db.insight.create({
+            // orgId auto-injected by tenant-scoped client
             data: {
               category: 'USAGE_PATTERN',
               title: `Avg session cost up ${Math.round(change * 100)}% this week`,
@@ -187,7 +200,7 @@ class InsightGenerator {
               impact: { percentChange: Math.round(change * 100) },
               metadata: { thisWeekAvg: thisAvg, lastWeekAvg: lastAvg },
               dedupKey: key,
-            },
+            } as any,
           });
           insights.push(insight as unknown as Insight);
         }
@@ -198,11 +211,11 @@ class InsightGenerator {
   }
 
   /** Detect peak usage concentration in a narrow time window */
-  private async analyzePeakUsage(): Promise<Insight[]> {
+  private async analyzePeakUsage(db: PrismaClient): Promise<Insight[]> {
     const insights: Insight[] = [];
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    const sessions = await prisma.session.findMany({
+    const sessions = await db.session.findMany({
       where: { startedAt: { gte: sevenDaysAgo } },
       select: { startedAt: true, costUsd: true },
     });
@@ -240,7 +253,7 @@ class InsightGenerator {
     const peakEnd = (peakStart + 4) % 24;
     const key = dedupKey('USAGE_PATTERN', { type: 'peak_usage', peakStart });
 
-    const existing = await prisma.insight.findFirst({
+    const existing = await db.insight.findFirst({
       where: {
         dedupKey: key,
         status: 'ACTIVE',
@@ -249,7 +262,8 @@ class InsightGenerator {
     });
     if (existing) return insights;
 
-    const insight = await prisma.insight.create({
+    const insight = await db.insight.create({
+      // orgId auto-injected by tenant-scoped client
       data: {
         category: 'USAGE_PATTERN',
         title: `Peak usage ${peakStart}:00-${peakEnd}:00 UTC (${Math.round(concentration * 100)}% of spend)`,
@@ -257,7 +271,7 @@ class InsightGenerator {
         impact: { percentChange: Math.round(concentration * 100) },
         metadata: { peakStart, peakEnd, concentration, totalCost },
         dedupKey: key,
-      },
+      } as any,
     });
 
     insights.push(insight as unknown as Insight);
@@ -265,11 +279,11 @@ class InsightGenerator {
   }
 
   /** Suggest plan upgrade/downgrade based on actual spend */
-  private async analyzePlanRecommendation(): Promise<Insight[]> {
+  private async analyzePlanRecommendation(db: PrismaClient): Promise<Insight[]> {
     const insights: Insight[] = [];
     const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    const result = await prisma.session.aggregate({
+    const result = await db.session.aggregate({
       where: { startedAt: { gte: thirtyDaysAgo } },
       _sum: { costUsd: true },
     });
@@ -296,7 +310,7 @@ class InsightGenerator {
 
     const key = dedupKey('PLAN_RECOMMENDATION', { type: 'plan_utilization', month: new Date().toISOString().slice(0, 7) });
 
-    const existing = await prisma.insight.findFirst({
+    const existing = await db.insight.findFirst({
       where: {
         dedupKey: key,
         status: 'ACTIVE',
@@ -305,7 +319,8 @@ class InsightGenerator {
     });
     if (existing) return insights;
 
-    const insight = await prisma.insight.create({
+    const insight = await db.insight.create({
+      // orgId auto-injected by tenant-scoped client
       data: {
         category: 'PLAN_RECOMMENDATION',
         title,
@@ -313,25 +328,41 @@ class InsightGenerator {
         impact: { percentChange: Math.round(valueRatio * 100) },
         metadata: { monthlySpend, planCost, valueRatio },
         dedupKey: key,
-      },
+      } as any,
     });
 
     insights.push(insight as unknown as Insight);
     return insights;
   }
 
-  /** Weekly digest — called by scheduler on Sunday */
-  async weeklyDigest(): Promise<Insight | null> {
+  /** Weekly digest — called by scheduler on Sunday, runs for every org */
+  async weeklyDigest(): Promise<Insight[]> {
+    const orgs = await globalPrisma.organization.findMany({ select: { id: true } });
+    const results: Insight[] = [];
+
+    for (const org of orgs) {
+      const db = createTenantPrisma(org.id);
+      const insight = await this.weeklyDigestForOrg(db).catch((e) => {
+        console.error(`Weekly digest failed for org ${org.id}:`, e);
+        return null;
+      });
+      if (insight) results.push(insight);
+    }
+
+    return results;
+  }
+
+  private async weeklyDigestForOrg(db: PrismaClient): Promise<Insight | null> {
     const weekStart = new Date();
     weekStart.setUTCDate(weekStart.getUTCDate() - 7);
 
     const [stats, alertCount] = await Promise.all([
-      prisma.session.aggregate({
+      db.session.aggregate({
         where: { startedAt: { gte: weekStart } },
         _sum: { costUsd: true },
         _count: true,
       }),
-      prisma.alert.count({
+      db.alert.count({
         where: { createdAt: { gte: weekStart } },
       }),
     ]);
@@ -341,7 +372,8 @@ class InsightGenerator {
 
     const key = dedupKey('PLAN_RECOMMENDATION', { type: 'weekly_digest', week: weekStart.toISOString().slice(0, 10) });
 
-    const insight = await prisma.insight.create({
+    const insight = await db.insight.create({
+      // orgId auto-injected by tenant-scoped client
       data: {
         category: 'PLAN_RECOMMENDATION',
         title: `Weekly digest: ${sessionCount} sessions, $${totalCost.toFixed(0)} spent`,
@@ -349,7 +381,7 @@ class InsightGenerator {
         impact: {},
         metadata: { sessionCount, totalCost, alertCount, weekStart: weekStart.toISOString() },
         dedupKey: key,
-      },
+      } as any,
     });
 
     // Also create an alert for the digest
@@ -359,14 +391,14 @@ class InsightGenerator {
       title: insight.title,
       message: insight.description,
       insightId: insight.id,
-    });
+    }, db);
 
     return insight as unknown as Insight;
   }
 
   /** Apply an insight — creates associated rule if applicable */
-  async applyInsight(insightId: string): Promise<{ insight: Insight; ruleId?: string }> {
-    const insight = await prisma.insight.findUnique({ where: { id: insightId } });
+  async applyInsight(insightId: string, db: PrismaClient): Promise<{ insight: Insight; ruleId?: string }> {
+    const insight = await db.insight.findUnique({ where: { id: insightId } });
     if (!insight) throw new Error('Insight not found');
 
     let ruleId: string | undefined;
@@ -386,19 +418,20 @@ class InsightGenerator {
         throw new Error('suggestedRule metadata is missing required fields (type, scope, condition, action)');
       }
 
-      const rule = await prisma.rule.create({
+      const rule = await db.rule.create({
+        // orgId auto-injected by tenant-scoped client
         data: {
           name: `Auto: ${insight.title}`,
           type,
           scope,
           condition,
           action,
-        },
+        } as any,
       });
       ruleId = rule.id;
     }
 
-    const updated = await prisma.insight.update({
+    const updated = await db.insight.update({
       where: { id: insightId },
       data: { status: 'APPLIED', appliedAt: new Date() },
     });

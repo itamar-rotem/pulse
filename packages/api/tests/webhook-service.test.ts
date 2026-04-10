@@ -24,6 +24,8 @@ vi.stubGlobal('fetch', mockFetch);
 
 import { webhookService } from '../src/services/intelligence/webhook-service.js';
 
+const db = mockPrisma as any;
+
 // Helper: flush microtasks and any immediately-resolving promises
 const settle = () => new Promise<void>((resolve) => setTimeout(resolve, 0));
 
@@ -50,7 +52,7 @@ describe('WebhookService', () => {
         metadata: {},
         status: 'ACTIVE',
         createdAt: new Date().toISOString(),
-      } as any);
+      } as any, db);
 
       // Allow fire-and-forget delivery to complete
       await settle();
@@ -68,7 +70,7 @@ describe('WebhookService', () => {
     it('skips disabled webhooks', async () => {
       mockPrisma.webhook.findMany.mockResolvedValue([]);
 
-      await webhookService.dispatch({ type: 'ANOMALY' } as any);
+      await webhookService.dispatch({ type: 'ANOMALY' } as any, db);
 
       await settle();
 
@@ -84,7 +86,7 @@ describe('WebhookService', () => {
       mockFetch.mockRejectedValue(new Error('Connection refused'));
       mockPrisma.webhook.update.mockResolvedValue({});
 
-      await webhookService.dispatch({ id: 'a1', type: 'ANOMALY', severity: 'WARNING', title: 'T', message: 'M', metadata: {}, status: 'ACTIVE', createdAt: new Date().toISOString() } as any);
+      await webhookService.dispatch({ id: 'a1', type: 'ANOMALY', severity: 'WARNING', title: 'T', message: 'M', metadata: {}, status: 'ACTIVE', createdAt: new Date().toISOString() } as any, db);
 
       // Advance through all retry delays (1s + 5s + settle)
       await vi.runAllTimersAsync();
@@ -106,7 +108,7 @@ describe('WebhookService', () => {
       mockFetch.mockRejectedValue(new Error('Connection refused'));
       mockPrisma.webhook.update.mockResolvedValue({});
 
-      await webhookService.dispatch({ id: 'a1', type: 'ANOMALY', severity: 'WARNING', title: 'T', message: 'M', metadata: {}, status: 'ACTIVE', createdAt: new Date().toISOString() } as any);
+      await webhookService.dispatch({ id: 'a1', type: 'ANOMALY', severity: 'WARNING', title: 'T', message: 'M', metadata: {}, status: 'ACTIVE', createdAt: new Date().toISOString() } as any, db);
 
       // Advance through all retry delays
       await vi.runAllTimersAsync();
@@ -134,7 +136,7 @@ describe('WebhookService', () => {
 
       await webhookService.dispatch({
         id: 'a1', type: 'ANOMALY', severity: 'WARNING', title: 'T', message: 'M', metadata: {}, status: 'ACTIVE', createdAt: new Date().toISOString(),
-      } as any);
+      } as any, db);
 
       await vi.runAllTimersAsync();
 
@@ -158,7 +160,7 @@ describe('WebhookService', () => {
 
       await webhookService.dispatch({
         id: 'a1', type: 'ANOMALY', severity: 'WARNING', title: 'T', message: 'M', metadata: {}, status: 'ACTIVE', createdAt: new Date().toISOString(),
-      } as any);
+      } as any, db);
 
       await vi.runAllTimersAsync();
 
@@ -182,7 +184,7 @@ describe('WebhookService', () => {
 
       await webhookService.dispatch({
         id: 'a1', type: 'ANOMALY', severity: 'WARNING', title: 'T', message: 'M', metadata: {}, status: 'ACTIVE', createdAt: new Date().toISOString(),
-      } as any);
+      } as any, db);
 
       await vi.runAllTimersAsync();
 
@@ -200,7 +202,7 @@ describe('WebhookService', () => {
       });
       mockFetch.mockResolvedValue({ ok: true, status: 200 });
 
-      const result = await webhookService.test('wh-1');
+      const result = await webhookService.test('wh-1', db);
 
       expect(result.success).toBe(true);
       expect(result.statusCode).toBe(200);
@@ -212,7 +214,7 @@ describe('WebhookService', () => {
       });
       mockFetch.mockRejectedValue(new Error('DNS resolution failed'));
 
-      const result = await webhookService.test('wh-1');
+      const result = await webhookService.test('wh-1', db);
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('DNS resolution failed');

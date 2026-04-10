@@ -1,18 +1,65 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import type { Server } from 'http';
+import type { Server, IncomingMessage } from 'http';
+import type { PrismaClient } from '@prisma/client';
+import bcrypt from 'bcrypt';
 import { redisSub, redis } from './services/redis.js';
+import { prisma as globalPrisma } from './services/prisma.js';
+import { createTenantPrisma } from './services/tenant-prisma.js';
 import { startSession, updateSession, endSession } from './services/session-service.js';
 import { ruleEngine } from './services/intelligence/rule-engine.js';
 import { anomalyDetector } from './services/intelligence/anomaly-detector.js';
 import { alertManager } from './services/intelligence/alert-manager.js';
 
+const DEFAULT_ORG_ID = 'org_default_seed';
+
 interface TaggedWebSocket extends WebSocket {
   role?: 'agent' | 'dashboard';
   isAlive?: boolean;
+  orgId?: string;
+  tenantPrisma?: PrismaClient;
 }
 
 // Map sessionId → agent WebSocket for targeted pause/resume
 const sessionRegistry = new Map<string, TaggedWebSocket>();
+
+async function resolveWsApiKey(
+  rawKey: string,
+): Promise<{ orgId: string } | null> {
+  const prefix = rawKey.slice(0, 12);
+  const apiKey = await globalPrisma.apiKey.findFirst({
+    where: { prefix, revokedAt: null },
+  }).catch(() => null);
+
+  if (apiKey) {
+    const valid = await bcrypt.compare(rawKey, apiKey.keyHash).catch(() => false);
+    if (valid) {
+      // Update lastUsedAt (fire-and-forget)
+      globalPrisma.apiKey.update({
+        where: { id: apiKey.id },
+        data: { lastUsedAt: new Date() },
+      }).catch(() => {});
+      return { orgId: apiKey.orgId };
+    }
+  }
+
+  // Legacy fallback: env-var API key → seed org
+  const legacyKey = process.env.AGENT_API_KEY;
+  if (legacyKey && rawKey === legacyKey) {
+    console.warn('Legacy AGENT_API_KEY used on WS — migrate to org-scoped API keys');
+    return { orgId: DEFAULT_ORG_ID };
+  }
+
+  return null;
+}
+
+function extractApiKey(req: IncomingMessage, url: URL): string | null {
+  const queryKey = url.searchParams.get('apiKey');
+  if (queryKey) return queryKey;
+  const headerKey = req.headers['x-api-key'];
+  if (typeof headerKey === 'string') return headerKey;
+  if (Array.isArray(headerKey) && headerKey.length > 0) return headerKey[0];
+  return null;
+}
 
 export function createWsServer(server: Server): WebSocketServer {
   const wss = new WebSocketServer({ server, path: '/ws' });
@@ -30,10 +77,28 @@ export function createWsServer(server: Server): WebSocketServer {
     }
   });
 
-  wss.on('connection', (ws: TaggedWebSocket, req) => {
+  wss.on('connection', async (ws: TaggedWebSocket, req) => {
     const url = new URL(req.url || '/', `http://${req.headers.host}`);
     ws.role = url.searchParams.get('role') === 'agent' ? 'agent' : 'dashboard';
     ws.isAlive = true;
+
+    // For agents, require an API key and resolve tenant context before handling any messages
+    if (ws.role === 'agent') {
+      const apiKey = extractApiKey(req, url);
+      if (!apiKey) {
+        ws.close(4001, 'API key required');
+        return;
+      }
+
+      const resolved = await resolveWsApiKey(apiKey).catch(() => null);
+      if (!resolved) {
+        ws.close(4001, 'Invalid API key');
+        return;
+      }
+
+      ws.orgId = resolved.orgId;
+      ws.tenantPrisma = createTenantPrisma(resolved.orgId);
+    }
 
     ws.on('pong', () => { ws.isAlive = true; });
 
@@ -78,6 +143,10 @@ async function handleAgentMessage(
   msg: { type: string; data: Record<string, unknown> },
   agentWs: TaggedWebSocket,
 ): Promise<void> {
+  const db = agentWs.tenantPrisma;
+  const orgId = agentWs.orgId;
+  if (!db || !orgId) return; // Should never happen — connection would have been closed
+
   if (msg.type === 'session_start') {
     const sessionId = msg.data.id as string;
     sessionRegistry.set(sessionId, agentWs);
@@ -87,7 +156,7 @@ async function handleAgentMessage(
       projectSlug: msg.data.projectSlug as string,
       sessionType: msg.data.sessionType as string,
       model: msg.data.model as string,
-    }).catch(() => {}); // ignore if session already exists
+    }, db).catch(() => {}); // ignore if session already exists
   } else if (msg.type === 'token_event') {
     const d = msg.data;
     const sessionId = d.sessionId as string;
@@ -112,22 +181,21 @@ async function handleAgentMessage(
       tool: d.tool as string,
       projectSlug: d.projectSlug as string,
       sessionType: d.sessionType as string,
-    });
+    }, db);
 
-    // Update daily cost counter in Redis
-    // redis is imported statically at the top of this file
-    redis.incrbyfloat('pulse:daily_cost', d.costDeltaUsd as number).catch(() => {});
-    // Increment project cost counter in Redis
+    // Update daily cost counter in Redis (org-scoped)
+    redis.incrbyfloat(`pulse:daily_cost:${orgId}`, d.costDeltaUsd as number).catch(() => {});
+    // Increment project cost counters in Redis (org-scoped)
     const projectSlug = d.projectSlug as string;
     if (projectSlug) {
-      redis.incrbyfloat(`pulse:project_cost:${projectSlug}:daily`, d.costDeltaUsd as number).catch(() => {});
-      redis.incrbyfloat(`pulse:project_cost:${projectSlug}:weekly`, d.costDeltaUsd as number).catch(() => {});
-      redis.incrbyfloat(`pulse:project_cost:${projectSlug}:monthly`, d.costDeltaUsd as number).catch(() => {});
+      redis.incrbyfloat(`pulse:project_cost:${orgId}:${projectSlug}:daily`, d.costDeltaUsd as number).catch(() => {});
+      redis.incrbyfloat(`pulse:project_cost:${orgId}:${projectSlug}:weekly`, d.costDeltaUsd as number).catch(() => {});
+      redis.incrbyfloat(`pulse:project_cost:${orgId}:${projectSlug}:monthly`, d.costDeltaUsd as number).catch(() => {});
     }
 
     // Intelligence: evaluate rules + detect anomalies
     const [violations, anomalies] = await Promise.all([
-      ruleEngine.evaluate(d as any, result.session as any).catch(() => []),
+      ruleEngine.evaluate(d as any, result.session as any, orgId).catch(() => []),
       anomalyDetector.check(d as any, result.session as any).catch(() => []),
     ]);
 
@@ -140,7 +208,7 @@ async function handleAgentMessage(
         sessionId: v.sessionId || undefined,
         ruleId: v.ruleId,
         metadata: { ruleType: v.ruleType, action: v.action },
-      }).catch(() => {});
+      }, db).catch(() => {});
 
       if (v.action === 'PAUSE') {
         sendToAgent(v.sessionId, {
@@ -160,7 +228,7 @@ async function handleAgentMessage(
         message: a.message,
         sessionId: a.sessionId,
         metadata: a.metadata,
-      }).catch(() => {});
+      }, db).catch(() => {});
     }
   } else if (msg.type === 'session_end') {
     const sessionId = msg.data.sessionId as string;
@@ -178,10 +246,10 @@ async function handleAgentMessage(
         message: termAnomaly.message,
         sessionId: termAnomaly.sessionId,
         metadata: termAnomaly.metadata,
-      }).catch(() => {});
+      }, db).catch(() => {});
     }
 
-    await endSession(sessionId);
+    await endSession(sessionId, db);
   }
 }
 

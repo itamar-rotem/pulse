@@ -34,9 +34,16 @@ class Scheduler {
       }, 5 * 60_000),
     );
 
-    // Midnight UTC: reset daily cost counter
-    const midnightJob = cron.schedule('0 0 * * *', () => {
-      redis.del('pulse:daily_cost').catch(() => {});
+    // Midnight UTC: reset daily cost counters for all orgs
+    const midnightJob = cron.schedule('0 0 * * *', async () => {
+      try {
+        const keys = await redis.keys('pulse:daily_cost:*');
+        if (keys.length > 0) {
+          await redis.del(...keys);
+        }
+      } catch {
+        // non-critical
+      }
     }, { timezone: 'UTC' });
     this.cronJobs.push(midnightJob);
 
