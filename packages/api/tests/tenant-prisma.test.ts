@@ -58,6 +58,37 @@ describe('createTenantPrisma', () => {
     expect(args.data).toEqual({ name: 'Test Rule', orgId: 'org-456' });
   });
 
+  it('injects orgId into each row of a createMany array', () => {
+    let capturedHandler: Function;
+    mockPrisma.$extends.mockImplementation((ext: any) => {
+      capturedHandler = ext.query.$allOperations;
+      return {};
+    });
+
+    createTenantPrisma('org-many');
+
+    const mockQuery = vi.fn((args: any) => args);
+    const args = {
+      data: [
+        { name: 'Rule A' },
+        { name: 'Rule B' },
+        { name: 'Rule C' },
+      ],
+    };
+    capturedHandler!({ args, query: mockQuery, operation: 'createMany', model: 'Rule' });
+
+    // Each row must have orgId, and the array (not array object) must carry them.
+    expect(Array.isArray(args.data)).toBe(true);
+    expect(args.data).toEqual([
+      { name: 'Rule A', orgId: 'org-many' },
+      { name: 'Rule B', orgId: 'org-many' },
+      { name: 'Rule C', orgId: 'org-many' },
+    ]);
+    // Sanity: array object itself shouldn't have a stray orgId property
+    expect((args.data as any).orgId).toBeUndefined();
+    expect(mockQuery).toHaveBeenCalledWith(args);
+  });
+
   it('passes through non-tenant models unchanged', () => {
     let capturedHandler: Function;
     mockPrisma.$extends.mockImplementation((ext: any) => {
