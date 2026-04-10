@@ -10,10 +10,8 @@ const mockPrisma = vi.hoisted(() => ({
 }));
 
 vi.mock('../../src/services/prisma.js', () => ({ prisma: mockPrisma }));
-vi.mock('@clerk/express', () => ({
-  clerkClient: {
-    verifyToken: vi.fn(),
-  },
+vi.mock('@clerk/backend', () => ({
+  verifyToken: vi.fn(),
 }));
 vi.mock('bcrypt', () => ({ default: { compare: vi.fn() } }));
 vi.mock('../../src/services/tenant-prisma.js', () => ({
@@ -77,8 +75,9 @@ describe('requireRole middleware', () => {
 
   it('rejects MEMBER from admin-only route', async () => {
     // Simulate a Clerk token that resolves to MEMBER
-    const { clerkClient } = await import('@clerk/express');
-    (clerkClient.verifyToken as any).mockResolvedValue({
+    process.env.CLERK_SECRET_KEY = 'sk_test_dummy';
+    const { verifyToken } = await import('@clerk/backend');
+    (verifyToken as any).mockResolvedValue({
       org_id: 'clerk_org_1',
       org_role: 'org:member',
       sub: 'user_1',
@@ -89,5 +88,6 @@ describe('requireRole middleware', () => {
     const app = createApp();
     const res = await request(app).get('/admin-only').set('Authorization', 'Bearer valid-clerk-token');
     expect(res.status).toBe(403);
+    delete process.env.CLERK_SECRET_KEY;
   });
 });

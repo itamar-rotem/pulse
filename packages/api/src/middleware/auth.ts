@@ -1,5 +1,5 @@
 import type { Request, Response, NextFunction } from 'express';
-import { clerkClient } from '@clerk/express';
+import { verifyToken } from '@clerk/backend';
 import bcrypt from 'bcrypt';
 import { prisma } from '../services/prisma.js';
 
@@ -79,7 +79,9 @@ async function resolveClerkToken(
   token: string,
 ): Promise<{ orgId: string; userId?: string; role: 'OWNER' | 'ADMIN' | 'MEMBER' } | null> {
   try {
-    const payload = await clerkClient.verifyToken(token);
+    const secretKey = process.env.CLERK_SECRET_KEY;
+    if (!secretKey) return null;
+    const payload = await verifyToken(token, { secretKey });
     if (!payload.org_id) return null;
 
     // Look up our local org by Clerk org ID

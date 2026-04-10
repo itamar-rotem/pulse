@@ -14,6 +14,7 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@clerk/backend": "^3.2.8",
     "@clerk/express": "^2.1.0",
     "@prisma/client": "^6.9.0",
     "@pulse/shared": "workspace:*",
