@@ -370,6 +370,12 @@ class InsightGenerator {
     const sessionCount = stats._count;
     const totalCost = stats._sum.costUsd ?? 0;
 
+    // Skip empty orgs — no sessions means no signal, and a "0 sessions, $0" digest
+    // spams new/inactive tenants every Sunday.
+    if (sessionCount === 0 || totalCost === 0) {
+      return null;
+    }
+
     const key = dedupKey('PLAN_RECOMMENDATION', { type: 'weekly_digest', week: weekStart.toISOString().slice(0, 10) });
 
     const insight = await db.insight.create({

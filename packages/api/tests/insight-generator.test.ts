@@ -266,5 +266,17 @@ describe('InsightGenerator', () => {
       expect(insight!.title).toContain('$450');
       expect(alertManager.create).toHaveBeenCalled();
     });
+
+    it('skips digest for orgs with no sessions', async () => {
+      mockPrisma.session.aggregate.mockResolvedValue({ _sum: { costUsd: 0 }, _count: 0 });
+      mockPrisma.alert.count.mockResolvedValue(0);
+      mockPrisma.insight.create.mockImplementation((args: any) => Promise.resolve({ id: 'digest-x', ...args.data }));
+
+      const results = await insightGenerator.weeklyDigest();
+
+      expect(results).toHaveLength(0);
+      expect(mockPrisma.insight.create).not.toHaveBeenCalled();
+      expect(alertManager.create).not.toHaveBeenCalled();
+    });
   });
 });
