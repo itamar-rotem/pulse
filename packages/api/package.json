@@ -14,17 +14,21 @@
     "db:studio": "prisma studio"
   },
   "dependencies": {
+    "@clerk/express": "^2.1.0",
     "@prisma/client": "^6.9.0",
     "@pulse/shared": "workspace:*",
+    "bcrypt": "^6.0.0",
     "cors": "^2.8.5",
     "express": "^5.1.0",
     "ioredis": "^5.6.0",
     "jsonwebtoken": "^9.0.2",
     "node-cron": "^4.2.1",
+    "svix": "^1.90.0",
     "ws": "^8.18.0",
     "zod": "^3.25.0"
   },
   "devDependencies": {
+    "@types/bcrypt": "^6.0.0",
     "@types/cors": "^2.8.17",
     "@types/express": "^5.0.0",
     "@types/jsonwebtoken": "^9.0.9",
