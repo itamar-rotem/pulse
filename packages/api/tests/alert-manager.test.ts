@@ -19,6 +19,10 @@ vi.mock('@prisma/client', () => ({
   PrismaClient: vi.fn(() => mockPrisma),
 }));
 
+vi.mock('../src/services/prisma.js', () => ({
+  prisma: mockPrisma,
+}));
+
 // Mock redis
 vi.mock('../src/services/redis.js', () => ({
   publishAlert: vi.fn(),
@@ -30,6 +34,8 @@ vi.mock('../src/services/intelligence/webhook-service.js', () => ({
 }));
 
 import { alertManager } from '../src/services/intelligence/alert-manager.js';
+
+const db = mockPrisma as any;
 
 describe('AlertManager', () => {
   beforeEach(() => {
@@ -61,7 +67,7 @@ describe('AlertManager', () => {
         title: 'Burn rate spike',
         message: 'Session xyz burn rate 5x above baseline',
         sessionId: 'session-1',
-      });
+      }, db);
 
       expect(result.id).toBe('alert-1');
       expect(mockPrisma.alert.create).toHaveBeenCalledOnce();
@@ -84,7 +90,7 @@ describe('AlertManager', () => {
         title: 'Cost cap exceeded',
         message: 'Over $50',
         ruleId: 'rule-1',
-      });
+      }, db);
 
       expect(mockPrisma.rule.update).toHaveBeenCalledWith({
         where: { id: 'rule-1' },
@@ -97,7 +103,7 @@ describe('AlertManager', () => {
     it('counts ACTIVE alerts', async () => {
       mockPrisma.alert.count.mockResolvedValue(5);
 
-      const count = await alertManager.getUnreadCount();
+      const count = await alertManager.getUnreadCount(db);
 
       expect(count).toBe(5);
       expect(mockPrisma.alert.count).toHaveBeenCalledWith({
@@ -110,7 +116,7 @@ describe('AlertManager', () => {
     it('sets status to READ and readAt timestamp', async () => {
       mockPrisma.alert.update.mockResolvedValue({});
 
-      await alertManager.markRead('alert-1');
+      await alertManager.markRead('alert-1', db);
 
       expect(mockPrisma.alert.update).toHaveBeenCalledWith({
         where: { id: 'alert-1' },
@@ -123,7 +129,7 @@ describe('AlertManager', () => {
     it('sets status to DISMISSED and dismissedAt timestamp', async () => {
       mockPrisma.alert.update.mockResolvedValue({});
 
-      await alertManager.dismiss('alert-1');
+      await alertManager.dismiss('alert-1', db);
 
       expect(mockPrisma.alert.update).toHaveBeenCalledWith({
         where: { id: 'alert-1' },
@@ -136,7 +142,7 @@ describe('AlertManager', () => {
     it('updates multiple alerts at once', async () => {
       mockPrisma.alert.updateMany.mockResolvedValue({ count: 3 });
 
-      await alertManager.batchMarkRead(['a1', 'a2', 'a3']);
+      await alertManager.batchMarkRead(['a1', 'a2', 'a3'], db);
 
       expect(mockPrisma.alert.updateMany).toHaveBeenCalledWith({
         where: { id: { in: ['a1', 'a2', 'a3'] } },
@@ -150,7 +156,7 @@ describe('AlertManager', () => {
       mockPrisma.alert.findMany.mockResolvedValue([]);
       mockPrisma.alert.count.mockResolvedValue(0);
 
-      await alertManager.getAlerts({ status: 'ACTIVE', severity: 'CRITICAL', page: 2, limit: 10 });
+      await alertManager.getAlerts({ status: 'ACTIVE', severity: 'CRITICAL', page: 2, limit: 10 } as any, db);
 
       expect(mockPrisma.alert.findMany).toHaveBeenCalledWith({
         where: { status: 'ACTIVE', severity: 'CRITICAL' },

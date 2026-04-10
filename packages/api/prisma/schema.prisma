@@ -7,6 +7,75 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Plan {
+  FREE
+  PRO
+  ENTERPRISE
+}
+
+enum Role {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+model Organization {
+  id         String   @id @default(cuid())
+  clerkOrgId String?  @unique @map("clerk_org_id")
+  name       String
+  slug       String   @unique
+  plan       Plan     @default(FREE)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  users       User[]
+  apiKeys     ApiKey[]
+  sessions    Session[]
+  tokenEvents TokenEvent[]
+  rules       Rule[]
+  alerts      Alert[]
+  insights    Insight[]
+  webhooks    Webhook[]
+
+  @@map("organizations")
+}
+
+model User {
+  id          String       @id @default(cuid())
+  clerkUserId String       @unique @map("clerk_user_id")
+  email       String
+  name        String?
+  role        Role         @default(MEMBER)
+  orgId       String       @map("org_id")
+  org         Organization @relation(fields: [orgId], references: [id])
+  lastSeenAt  DateTime?    @map("last_seen_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  apiKeys ApiKey[]
+
+  @@index([orgId])
+  @@map("users")
+}
+
+model ApiKey {
+  id          String       @id @default(cuid())
+  orgId       String       @map("org_id")
+  org         Organization @relation(fields: [orgId], references: [id])
+  keyHash     String       @map("key_hash")
+  prefix      String
+  name        String
+  createdById String       @map("created_by_id")
+  createdBy   User         @relation(fields: [createdById], references: [id])
+  lastUsedAt  DateTime?    @map("last_used_at")
+  revokedAt   DateTime?    @map("revoked_at")
+  createdAt   DateTime     @default(now()) @map("created_at")
+
+  @@index([prefix])
+  @@index([orgId])
+  @@map("api_keys")
+}
+
 model Session {
   id                  String        @id @default(uuid())
   tool                String
@@ -21,9 +90,12 @@ model Session {
   cacheCreationTokens Int           @default(0) @map("cache_creation_tokens")
   cacheReadTokens     Int           @default(0) @map("cache_read_tokens")
   costUsd             Float         @default(0) @map("cost_usd")
+  orgId               String        @map("org_id")
+  org                 Organization  @relation(fields: [orgId], references: [id])
   tokenEvents         TokenEvent[]
   alerts              Alert[]
 
+  @@index([orgId])
   @@map("sessions")
 }
 
@@ -34,27 +106,30 @@ enum SessionStatus {
 }
 
 model TokenEvent {
-  id                     String   @id @default(uuid())
-  sessionId              String   @map("session_id")
-  timestamp              DateTime @default(now())
+  id                     String        @id @default(uuid())
+  sessionId              String        @map("session_id")
+  timestamp              DateTime      @default(now())
   tool                   String
   model                  String
-  projectSlug            String   @map("project_slug")
-  sessionType            String   @map("session_type")
-  inputTokens            Int      @map("input_tokens")
-  outputTokens           Int      @map("output_tokens")
-  cacheCreationTokens    Int      @default(0) @map("cache_creation_tokens")
-  cacheReadTokens        Int      @default(0) @map("cache_read_tokens")
-  costDeltaUsd           Float    @map("cost_delta_usd")
-  cumulativeInputTokens  Int      @map("cumulative_input_tokens")
-  cumulativeOutputTokens Int      @map("cumulative_output_tokens")
-  cumulativeCostUsd      Float    @map("cumulative_cost_usd")
-  burnRatePerMin         Float    @map("burn_rate_per_min")
+  projectSlug            String        @map("project_slug")
+  sessionType            String        @map("session_type")
+  inputTokens            Int           @map("input_tokens")
+  outputTokens           Int           @map("output_tokens")
+  cacheCreationTokens    Int           @default(0) @map("cache_creation_tokens")
+  cacheReadTokens        Int           @default(0) @map("cache_read_tokens")
+  costDeltaUsd           Float         @map("cost_delta_usd")
+  cumulativeInputTokens  Int           @map("cumulative_input_tokens")
+  cumulativeOutputTokens Int           @map("cumulative_output_tokens")
+  cumulativeCostUsd      Float         @map("cumulative_cost_usd")
+  burnRatePerMin         Float         @map("burn_rate_per_min")
+  orgId                  String        @map("org_id")
+  org                    Organization  @relation(fields: [orgId], references: [id])
 
-  session                Session  @relation(fields: [sessionId], references: [id])
+  session Session @relation(fields: [sessionId], references: [id])
 
   @@index([sessionId])
   @@index([timestamp])
+  @@index([orgId])
   @@map("token_events")
 }
 
@@ -70,8 +145,11 @@ model Rule {
   triggerCount    Int        @default(0) @map("trigger_count")
   createdAt       DateTime   @default(now()) @map("created_at")
   updatedAt       DateTime   @updatedAt @map("updated_at")
+  orgId           String     @map("org_id")
+  org             Organization @relation(fields: [orgId], references: [id])
   alerts          Alert[]
 
+  @@index([orgId])
   @@map("rules")
 }
 
@@ -91,26 +169,29 @@ enum RuleAction {
 }
 
 model Alert {
-  id          String      @id @default(uuid())
+  id          String        @id @default(uuid())
   type        AlertType
   severity    Severity
   title       String
   message     String
-  metadata    Json        @default("{}")
-  status      AlertStatus @default(ACTIVE)
-  sessionId   String?     @map("session_id")
-  session     Session?    @relation(fields: [sessionId], references: [id])
-  ruleId      String?     @map("rule_id")
-  rule        Rule?       @relation(fields: [ruleId], references: [id])
-  insightId   String?     @map("insight_id")
-  insight     Insight?    @relation(fields: [insightId], references: [id])
-  createdAt   DateTime    @default(now()) @map("created_at")
-  readAt      DateTime?   @map("read_at")
-  dismissedAt DateTime?   @map("dismissed_at")
+  metadata    Json          @default("{}")
+  status      AlertStatus   @default(ACTIVE)
+  sessionId   String?       @map("session_id")
+  session     Session?      @relation(fields: [sessionId], references: [id])
+  ruleId      String?       @map("rule_id")
+  rule        Rule?         @relation(fields: [ruleId], references: [id])
+  insightId   String?       @map("insight_id")
+  insight     Insight?      @relation(fields: [insightId], references: [id])
+  createdAt   DateTime      @default(now()) @map("created_at")
+  readAt      DateTime?     @map("read_at")
+  dismissedAt DateTime?     @map("dismissed_at")
+  orgId       String        @map("org_id")
+  org         Organization  @relation(fields: [orgId], references: [id])
 
   @@index([status])
   @@index([type])
   @@index([createdAt])
+  @@index([orgId])
   @@map("alerts")
 }
 
@@ -147,9 +228,12 @@ model Insight {
   createdAt   DateTime        @default(now()) @map("created_at")
   dismissedAt DateTime?       @map("dismissed_at")
   appliedAt   DateTime?       @map("applied_at")
+  orgId       String          @map("org_id")
+  org         Organization    @relation(fields: [orgId], references: [id])
 
   @@index([status])
   @@index([category])
+  @@index([orgId])
   @@map("insights")
 }
 
@@ -167,17 +251,20 @@ enum InsightStatus {
 }
 
 model Webhook {
-  id         String   @id @default(uuid())
+  id         String        @id @default(uuid())
   name       String
   url        String
   secret     String?
   events     String[]
-  enabled    Boolean  @default(true)
-  failCount  Int      @default(0) @map("fail_count")
-  createdAt  DateTime @default(now()) @map("created_at")
-  updatedAt  DateTime @updatedAt @map("updated_at")
-  lastError  String?  @map("last_error")
-  lastSentAt DateTime? @map("last_sent_at")
+  enabled    Boolean       @default(true)
+  failCount  Int           @default(0) @map("fail_count")
+  createdAt  DateTime      @default(now()) @map("created_at")
+  updatedAt  DateTime      @updatedAt @map("updated_at")
+  lastError  String?       @map("last_error")
+  lastSentAt DateTime?     @map("last_sent_at")
+  orgId      String        @map("org_id")
+  org        Organization  @relation(fields: [orgId], references: [id])
 
+  @@index([orgId])
   @@map("webhooks")
 }

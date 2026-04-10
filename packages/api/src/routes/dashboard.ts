@@ -3,9 +3,9 @@ import { getLiveSummary } from '../services/session-service.js';
 
 export const dashboardRouter: IRouter = Router();
 
-dashboardRouter.get('/live-summary', async (_req, res) => {
+dashboardRouter.get('/live-summary', async (req, res) => {
   try {
-    const summary = await getLiveSummary();
+    const summary = await getLiveSummary(req.prisma!);
     res.json(summary);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });

@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useCallback, useState } from 'react';
+import { getAuthToken } from '@/lib/api';
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001/ws';
 
@@ -14,15 +15,32 @@ export function useWebSocket(onMessage: (msg: WsMessage) => void) {
   const [connected, setConnected] = useState(false);
   const onMessageRef = useRef(onMessage);
   onMessageRef.current = onMessage;
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const closedRef = useRef(false);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
+    if (closedRef.current) return;
     try {
-      const ws = new WebSocket(`${WS_URL}?role=dashboard`);
+      const token = await getAuthToken();
+      if (closedRef.current) return;
+      if (!token) {
+        // Clerk token not ready yet — defer. TokenProvider will install it shortly.
+        reconnectTimerRef.current = setTimeout(() => {
+          void connect();
+        }, 500);
+        return;
+      }
+
+      const url = `${WS_URL}?role=dashboard&token=${encodeURIComponent(token)}`;
+      const ws = new WebSocket(url);
 
       ws.onopen = () => setConnected(true);
       ws.onclose = () => {
         setConnected(false);
-        setTimeout(connect, 2000);
+        if (closedRef.current) return;
+        reconnectTimerRef.current = setTimeout(() => {
+          void connect();
+        }, 2000);
       };
       ws.onerror = () => {
         // Will trigger onclose
@@ -38,13 +56,22 @@ export function useWebSocket(onMessage: (msg: WsMessage) => void) {
 
       wsRef.current = ws;
     } catch {
-      setTimeout(connect, 2000);
+      if (closedRef.current) return;
+      reconnectTimerRef.current = setTimeout(() => {
+        void connect();
+      }, 2000);
     }
   }, []);
 
   useEffect(() => {
-    connect();
+    closedRef.current = false;
+    void connect();
     return () => {
+      closedRef.current = true;
+      if (reconnectTimerRef.current) {
+        clearTimeout(reconnectTimerRef.current);
+        reconnectTimerRef.current = null;
+      }
       wsRef.current?.close();
     };
   }, [connect]);

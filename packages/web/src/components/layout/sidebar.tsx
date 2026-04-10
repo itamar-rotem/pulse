@@ -8,7 +8,10 @@ import {
   Bell,
   ShieldCheck,
   Settings,
+  Key,
+  Users,
 } from 'lucide-react';
+import { UserButton, OrganizationSwitcher } from '@clerk/nextjs';
 import { NavItem } from '@/components/ui/nav-item';
 import { PlanCard } from '@/components/ui/plan-card';
 import { useLiveSummary } from '@/hooks/use-sessions';
@@ -22,8 +25,8 @@ export function Sidebar() {
 
   return (
     <aside className="w-[240px] shrink-0 border-r border-[var(--border)] bg-[var(--bg)] flex flex-col h-screen sticky top-0">
-      {/* Logo */}
-      <div className="px-5 py-5">
+      {/* Logo + Org Switcher */}
+      <div className="px-5 py-5 space-y-3">
         <div className="flex items-center gap-2.5">
           <div
             className="size-8 rounded-[9px] flex items-center justify-center"
@@ -37,6 +40,14 @@ export function Sidebar() {
           </div>
           <span className="text-[17px] font-bold text-[var(--text-1)]">Pulse</span>
         </div>
+        <OrganizationSwitcher
+          appearance={{
+            elements: {
+              rootBox: 'w-full',
+              organizationSwitcherTrigger: 'w-full justify-between',
+            },
+          }}
+        />
       </div>
 
       {/* Navigation */}
@@ -72,13 +83,22 @@ export function Sidebar() {
           </p>
           <div className="space-y-0.5">
             <NavItem href="/settings" label="Settings" icon={Settings} />
+            <NavItem href="/settings/api-keys" label="API Keys" icon={Key} />
+            <NavItem href="/settings/members" label="Members" icon={Users} />
           </div>
         </div>
       </nav>
 
-      {/* Plan card pinned to bottom */}
-      <div className="px-3 pb-4 pt-2">
-        <PlanCard planName="Max Plan" monthlyCost={100} totalValue={totalValue} />
+      {/* User button + plan card pinned to bottom */}
+      <div className="px-3 pb-4 pt-2 border-t border-[var(--border)]">
+        <div className="flex items-center gap-3 px-2 py-2">
+          <UserButton
+            appearance={{
+              elements: { avatarBox: 'size-8' },
+            }}
+          />
+          <PlanCard planName="Max Plan" monthlyCost={100} totalValue={totalValue} />
+        </div>
       </div>
     </aside>
   );

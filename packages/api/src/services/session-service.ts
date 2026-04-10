@@ -1,45 +1,51 @@
-import { PrismaClient } from '@prisma/client';
+import type { PrismaClient } from '@prisma/client';
 import { publishTokenEvent, publishSessionUpdate } from './redis.js';
 
-const prisma = new PrismaClient();
-
-export async function startSession(data: {
-  id: string;
-  tool: string;
-  projectSlug: string;
-  sessionType: string;
-  model: string;
-}) {
-  const session = await prisma.session.create({
+export async function startSession(
+  data: {
+    id: string;
+    tool: string;
+    projectSlug: string;
+    sessionType: string;
+    model: string;
+  },
+  db: PrismaClient,
+) {
+  const session = await db.session.create({
+    // orgId auto-injected by tenant-scoped client
     data: {
       id: data.id,
       tool: data.tool,
       projectSlug: data.projectSlug,
       sessionType: data.sessionType,
       model: data.model,
-    },
+    } as any,
   });
   await publishSessionUpdate(session);
   return session;
 }
 
-export async function updateSession(data: {
-  sessionId: string;
-  inputTokens: number;
-  outputTokens: number;
-  cacheCreationTokens: number;
-  cacheReadTokens: number;
-  costDeltaUsd: number;
-  cumulativeInputTokens: number;
-  cumulativeOutputTokens: number;
-  cumulativeCostUsd: number;
-  burnRatePerMin: number;
-  model: string;
-  tool: string;
-  projectSlug: string;
-  sessionType: string;
-}) {
-  const event = await prisma.tokenEvent.create({
+export async function updateSession(
+  data: {
+    sessionId: string;
+    inputTokens: number;
+    outputTokens: number;
+    cacheCreationTokens: number;
+    cacheReadTokens: number;
+    costDeltaUsd: number;
+    cumulativeInputTokens: number;
+    cumulativeOutputTokens: number;
+    cumulativeCostUsd: number;
+    burnRatePerMin: number;
+    model: string;
+    tool: string;
+    projectSlug: string;
+    sessionType: string;
+  },
+  db: PrismaClient,
+) {
+  const event = await db.tokenEvent.create({
+    // orgId auto-injected by tenant-scoped client
     data: {
       sessionId: data.sessionId,
       tool: data.tool,
@@ -55,10 +61,10 @@ export async function updateSession(data: {
       cumulativeOutputTokens: data.cumulativeOutputTokens,
       cumulativeCostUsd: data.cumulativeCostUsd,
       burnRatePerMin: data.burnRatePerMin,
-    },
+    } as any,
   });
 
-  const session = await prisma.session.update({
+  const session = await db.session.update({
     where: { id: data.sessionId },
     data: {
       inputTokens: data.cumulativeInputTokens,
@@ -75,8 +81,8 @@ export async function updateSession(data: {
   return { event, session };
 }
 
-export async function endSession(sessionId: string) {
-  const session = await prisma.session.update({
+export async function endSession(sessionId: string, db: PrismaClient) {
+  const session = await db.session.update({
     where: { id: sessionId },
     data: { endedAt: new Date(), status: 'ENDED' },
   });
@@ -84,8 +90,8 @@ export async function endSession(sessionId: string) {
   return session;
 }
 
-export async function pauseSession(sessionId: string) {
-  const session = await prisma.session.update({
+export async function pauseSession(sessionId: string, db: PrismaClient) {
+  const session = await db.session.update({
     where: { id: sessionId },
     data: { status: 'PAUSED' },
   });
@@ -93,8 +99,8 @@ export async function pauseSession(sessionId: string) {
   return session;
 }
 
-export async function resumeSession(sessionId: string) {
-  const session = await prisma.session.update({
+export async function resumeSession(sessionId: string, db: PrismaClient) {
+  const session = await db.session.update({
     where: { id: sessionId },
     data: { status: 'ACTIVE' },
   });
@@ -102,15 +108,18 @@ export async function resumeSession(sessionId: string) {
   return session;
 }
 
-export async function getSessionHistory(query: {
-  page?: number;
-  limit?: number;
-  tool?: string;
-  projectSlug?: string;
-  sessionType?: string;
-  startDate?: string;
-  endDate?: string;
-}) {
+export async function getSessionHistory(
+  query: {
+    page?: number;
+    limit?: number;
+    tool?: string;
+    projectSlug?: string;
+    sessionType?: string;
+    startDate?: string;
+    endDate?: string;
+  },
+  db: PrismaClient,
+) {
   const page = Number(query.page) || 1;
   const limit = Math.min(Number(query.limit) || 20, 100);
   const skip = (page - 1) * limit;
@@ -126,35 +135,35 @@ export async function getSessionHistory(query: {
   }
 
   const [sessions, total] = await Promise.all([
-    prisma.session.findMany({
+    db.session.findMany({
       where,
       orderBy: { startedAt: 'desc' },
       skip,
       take: limit,
     }),
-    prisma.session.count({ where }),
+    db.session.count({ where }),
   ]);
 
   return { sessions, total, page, limit };
 }
 
-export async function getSessionById(id: string) {
-  return prisma.session.findUnique({
+export async function getSessionById(id: string, db: PrismaClient) {
+  return db.session.findUnique({
     where: { id },
     include: { tokenEvents: { orderBy: { timestamp: 'asc' } } },
   });
 }
 
-export async function getLiveSummary() {
+export async function getLiveSummary(db: PrismaClient) {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
 
   const [activeSessions, todayStats] = await Promise.all([
-    prisma.session.findMany({
+    db.session.findMany({
       where: { endedAt: null },
       orderBy: { startedAt: 'desc' },
     }),
-    prisma.session.aggregate({
+    db.session.aggregate({
       where: { startedAt: { gte: todayStart } },
       _sum: { costUsd: true },
       _count: true,
@@ -162,17 +171,17 @@ export async function getLiveSummary() {
   ]);
 
   const [humanStats, agentStats, tokenTotals] = await Promise.all([
-    prisma.session.aggregate({
+    db.session.aggregate({
       where: { startedAt: { gte: todayStart }, sessionType: 'human' },
       _sum: { costUsd: true },
       _count: true,
     }),
-    prisma.session.aggregate({
+    db.session.aggregate({
       where: { startedAt: { gte: todayStart }, sessionType: { not: 'human' } },
       _sum: { costUsd: true },
       _count: true,
     }),
-    prisma.session.aggregate({
+    db.session.aggregate({
       where: { startedAt: { gte: todayStart } },
       _sum: {
         inputTokens: true,
