@@ -14,6 +14,9 @@ const mockPrisma = vi.hoisted(() => ({
 
 vi.mock('@prisma/client', () => ({ PrismaClient: vi.fn(() => mockPrisma) }));
 vi.mock('../../src/services/prisma.js', () => ({ prisma: mockPrisma }));
+vi.mock('../../src/services/tenant-prisma.js', () => ({
+  createTenantPrisma: () => mockPrisma,
+}));
 vi.mock('../../src/services/intelligence/webhook-service.js', () => ({
   webhookService: { test: vi.fn() },
 }));
@@ -23,6 +26,11 @@ import { webhooksRouter } from '../../src/routes/webhooks.js';
 function createApp() {
   const app = express();
   app.use(express.json());
+  app.use((req, _res, next) => {
+    (req as any).auth = { orgId: 'test-org', role: 'ADMIN' };
+    (req as any).prisma = mockPrisma;
+    next();
+  });
   app.use('/webhooks', webhooksRouter);
   return app;
 }

@@ -1,5 +1,5 @@
 import { Router, IRouter } from 'express';
-import { prisma } from '../services/prisma.js';
+import { requireRole } from '../middleware/require-role.js';
 import type { RuleType, RuleAction } from '@pulse/shared';
 
 export const rulesRouter: IRouter = Router();
@@ -10,9 +10,9 @@ const VALID_RULE_TYPES: RuleType[] = [
 ];
 const VALID_RULE_ACTIONS: RuleAction[] = ['ALERT', 'PAUSE', 'BLOCK'];
 
-rulesRouter.get('/', async (_req, res) => {
+rulesRouter.get('/', async (req, res) => {
   try {
-    const rules = await prisma.rule.findMany({ orderBy: { createdAt: 'desc' } });
+    const rules = await req.prisma!.rule.findMany({ orderBy: { createdAt: 'desc' } });
     res.json(rules);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
@@ -21,7 +21,8 @@ rulesRouter.get('/', async (_req, res) => {
 
 rulesRouter.get('/:id', async (req, res) => {
   try {
-    const rule = await prisma.rule.findUnique({ where: { id: req.params.id } });
+    const id = req.params.id as string;
+    const rule = await req.prisma!.rule.findUnique({ where: { id } });
     if (!rule) { res.status(404).json({ error: 'Rule not found' }); return; }
     res.json(rule);
   } catch (err) {
@@ -29,7 +30,7 @@ rulesRouter.get('/:id', async (req, res) => {
   }
 });
 
-rulesRouter.post('/', async (req, res) => {
+rulesRouter.post('/', requireRole('OWNER', 'ADMIN'), async (req, res) => {
   try {
     const { name, type, scope, condition, action } = req.body;
 
@@ -39,8 +40,8 @@ rulesRouter.post('/', async (req, res) => {
     if (!condition || typeof condition !== 'object') { res.status(400).json({ error: 'condition is required (object)' }); return; }
     if (!VALID_RULE_ACTIONS.includes(action)) { res.status(400).json({ error: `action must be one of: ${VALID_RULE_ACTIONS.join(', ')}` }); return; }
 
-    const rule = await prisma.rule.create({
-      data: { name, type, scope, condition, action },
+    const rule = await req.prisma!.rule.create({
+      data: { name, type, scope, condition, action } as any,
     });
     res.status(201).json(rule);
   } catch (err) {
@@ -48,8 +49,9 @@ rulesRouter.post('/', async (req, res) => {
   }
 });
 
-rulesRouter.put('/:id', async (req, res) => {
+rulesRouter.put('/:id', requireRole('OWNER', 'ADMIN'), async (req, res) => {
   try {
+    const id = req.params.id as string;
     const { name, type, scope, condition, action } = req.body;
     const data: Record<string, unknown> = {};
 
@@ -74,28 +76,30 @@ rulesRouter.put('/:id', async (req, res) => {
       data.action = action;
     }
 
-    const rule = await prisma.rule.update({ where: { id: req.params.id }, data });
+    const rule = await req.prisma!.rule.update({ where: { id }, data: data as any });
     res.json(rule);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
 });
 
-rulesRouter.delete('/:id', async (req, res) => {
+rulesRouter.delete('/:id', requireRole('OWNER', 'ADMIN'), async (req, res) => {
   try {
-    await prisma.rule.delete({ where: { id: req.params.id } });
+    const id = req.params.id as string;
+    await req.prisma!.rule.delete({ where: { id } });
     res.status(204).end();
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
 });
 
-rulesRouter.post('/:id/toggle', async (req, res) => {
+rulesRouter.post('/:id/toggle', requireRole('OWNER', 'ADMIN'), async (req, res) => {
   try {
-    const rule = await prisma.rule.findUnique({ where: { id: req.params.id } });
+    const id = req.params.id as string;
+    const rule = await req.prisma!.rule.findUnique({ where: { id } });
     if (!rule) { res.status(404).json({ error: 'Rule not found' }); return; }
-    const updated = await prisma.rule.update({
-      where: { id: req.params.id },
+    const updated = await req.prisma!.rule.update({
+      where: { id },
       data: { enabled: !rule.enabled },
     });
     res.json(updated);

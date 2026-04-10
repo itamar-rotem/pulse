@@ -1,6 +1,6 @@
 import { Router, IRouter } from 'express';
+import { requireRole } from '../middleware/require-role.js';
 import { insightGenerator } from '../services/intelligence/insight-generator.js';
-import { prisma } from '../services/prisma.js';
 export const insightsRouter: IRouter = Router();
 
 insightsRouter.get('/', async (req, res) => {
@@ -14,8 +14,8 @@ insightsRouter.get('/', async (req, res) => {
     if (req.query.status) where.status = req.query.status;
 
     const [insights, total] = await Promise.all([
-      prisma.insight.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
-      prisma.insight.count({ where }),
+      req.prisma!.insight.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),
+      req.prisma!.insight.count({ where }),
     ]);
 
     res.json({ insights, total, page, limit });
@@ -26,7 +26,8 @@ insightsRouter.get('/', async (req, res) => {
 
 insightsRouter.get('/:id', async (req, res) => {
   try {
-    const insight = await prisma.insight.findUnique({ where: { id: req.params.id } });
+    const id = req.params.id as string;
+    const insight = await req.prisma!.insight.findUnique({ where: { id } });
     if (!insight) { res.status(404).json({ error: 'Insight not found' }); return; }
     res.json(insight);
   } catch (err) {
@@ -34,10 +35,11 @@ insightsRouter.get('/:id', async (req, res) => {
   }
 });
 
-insightsRouter.put('/:id/dismiss', async (req, res) => {
+insightsRouter.put('/:id/dismiss', requireRole('OWNER', 'ADMIN'), async (req, res) => {
   try {
-    const insight = await prisma.insight.update({
-      where: { id: req.params.id },
+    const id = req.params.id as string;
+    const insight = await req.prisma!.insight.update({
+      where: { id },
       data: { status: 'DISMISSED', dismissedAt: new Date() },
     });
     res.json(insight);
@@ -46,9 +48,10 @@ insightsRouter.put('/:id/dismiss', async (req, res) => {
   }
 });
 
-insightsRouter.put('/:id/apply', async (req, res) => {
+insightsRouter.put('/:id/apply', requireRole('OWNER', 'ADMIN'), async (req, res) => {
   try {
-    const result = await insightGenerator.applyInsight(req.params.id);
+    const id = req.params.id as string;
+    const result = await insightGenerator.applyInsight(id);
     res.json(result);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
