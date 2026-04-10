@@ -183,14 +183,34 @@ async function handleAgentMessage(
       sessionType: d.sessionType as string,
     }, db);
 
-    // Update daily cost counter in Redis (org-scoped)
-    redis.incrbyfloat(`pulse:daily_cost:${orgId}`, d.costDeltaUsd as number).catch(() => {});
-    // Increment project cost counters in Redis (org-scoped)
+    // Update daily cost counter in Redis (org-scoped), with TTL as belt-and-suspenders.
+    // The midnight cron deletes these keys; the NX TTL guarantees bounded growth even if
+    // the cron fails to run on a given day.
+    const cost = d.costDeltaUsd as number;
+    {
+      const key = `pulse:daily_cost:${orgId}`;
+      const pipeline = redis.pipeline();
+      pipeline.incrbyfloat(key, cost);
+      pipeline.expire(key, 90000, 'NX'); // 25h
+      pipeline.exec().catch(() => {});
+    }
+
+    // Increment project cost counters in Redis (org-scoped), with period-appropriate TTLs
+    // so keys self-expire if the reset cron ever fails.
     const projectSlug = d.projectSlug as string;
     if (projectSlug) {
-      redis.incrbyfloat(`pulse:project_cost:${orgId}:${projectSlug}:daily`, d.costDeltaUsd as number).catch(() => {});
-      redis.incrbyfloat(`pulse:project_cost:${orgId}:${projectSlug}:weekly`, d.costDeltaUsd as number).catch(() => {});
-      redis.incrbyfloat(`pulse:project_cost:${orgId}:${projectSlug}:monthly`, d.costDeltaUsd as number).catch(() => {});
+      const periods: Array<['daily' | 'weekly' | 'monthly', number]> = [
+        ['daily', 90000],      // 25h
+        ['weekly', 691200],    // 8d
+        ['monthly', 2764800],  // 32d
+      ];
+      for (const [period, ttl] of periods) {
+        const key = `pulse:project_cost:${orgId}:${projectSlug}:${period}`;
+        const pipeline = redis.pipeline();
+        pipeline.incrbyfloat(key, cost);
+        pipeline.expire(key, ttl, 'NX');
+        pipeline.exec().catch(() => {});
+      }
     }
 
     // Intelligence: evaluate rules + detect anomalies
