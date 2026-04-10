@@ -4,7 +4,8 @@ import { homedir } from 'os';
 
 export interface AgentConfig {
   apiUrl: string;
-  apiKey: string;
+  apiKey: string;       // Org-scoped: pk_live_xxx (must be configured)
+  userToken?: string;   // Optional personal token: pt_live_xxx
   localPort: number;
 }
 
@@ -13,7 +14,7 @@ const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
 const DEFAULT_CONFIG: AgentConfig = {
   apiUrl: 'ws://localhost:3001/ws',
-  apiKey: 'dev-agent-key-change-in-production',
+  apiKey: '',  // No more hardcoded default — must be configured
   localPort: 7823,
 };
 

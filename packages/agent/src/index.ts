@@ -17,13 +17,21 @@ program
   .command('start')
   .description('Start monitoring Claude Code sessions')
   .option('--api-url <url>', 'Pulse API WebSocket URL')
-  .option('--api-key <key>', 'Pulse API key')
+  .option('--api-key <key>', 'Pulse API key (org-scoped)')
+  .option('--user-token <token>', 'Personal user token (optional)')
   .option('--port <number>', 'Local REST API port', '7823')
   .action(async (opts) => {
     const config = loadConfig();
     const apiUrl = opts.apiUrl || config.apiUrl;
-    const apiKey = opts.apiKey || config.apiKey;
+    const apiKey = opts.apiKey || process.env.PULSE_API_KEY || config.apiKey || process.env.AGENT_API_KEY || '';
+    const userToken = opts.userToken || process.env.PULSE_USER_TOKEN || config.userToken;
     const port = parseInt(opts.port) || config.localPort;
+
+    if (!apiKey) {
+      console.error('Error: --api-key is required (or set PULSE_API_KEY env var, or configure via `pulse-agent configure`)');
+      process.exit(1);
+    }
+    void userToken; // Reserved for future per-user attribution
 
     console.log('Starting Pulse agent...');
 
