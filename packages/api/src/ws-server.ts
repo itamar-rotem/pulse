@@ -2,6 +2,7 @@ import { WebSocketServer, WebSocket } from 'ws';
 import type { Server, IncomingMessage } from 'http';
 import type { PrismaClient } from '@prisma/client';
 import bcrypt from 'bcrypt';
+import { verifyToken } from '@clerk/backend';
 import { redisSub, redis } from './services/redis.js';
 import { prisma as globalPrisma } from './services/prisma.js';
 import { createTenantPrisma } from './services/tenant-prisma.js';
@@ -21,6 +22,31 @@ interface TaggedWebSocket extends WebSocket {
 
 // Map sessionId → agent WebSocket for targeted pause/resume
 const sessionRegistry = new Map<string, TaggedWebSocket>();
+
+async function resolveClerkTokenForWs(
+  token: string,
+): Promise<{ orgId: string; role: 'OWNER' | 'ADMIN' | 'MEMBER' } | null> {
+  try {
+    const secretKey = process.env.CLERK_SECRET_KEY;
+    if (!secretKey) return null;
+    const payload = await verifyToken(token, { secretKey });
+    if (!payload.org_id) return null;
+
+    const org = await globalPrisma.organization.findUnique({
+      where: { clerkOrgId: payload.org_id },
+    });
+    if (!org) return null;
+
+    const clerkRole = payload.org_role as string;
+    let role: 'OWNER' | 'ADMIN' | 'MEMBER' = 'MEMBER';
+    if (clerkRole === 'org:admin') role = 'ADMIN';
+    if (clerkRole === 'org:owner' || clerkRole === 'admin') role = 'OWNER';
+
+    return { orgId: org.id, role };
+  } catch {
+    return null;
+  }
+}
 
 async function resolveWsApiKey(
   rawKey: string,
@@ -69,12 +95,20 @@ export function createWsServer(server: Server): WebSocketServer {
   });
 
   redisSub.on('message', (channel, message) => {
-    if (channel === 'pulse:alerts') {
-      broadcast(wss, { type: 'alert', data: JSON.parse(message) }, 'dashboard');
-    } else {
-      const target = channel === 'pulse:token_events' ? 'token_event' : 'session_update';
-      broadcast(wss, { type: target, data: JSON.parse(message) }, 'dashboard');
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(message);
+    } catch {
+      return;
     }
+    const payloadOrgId = typeof parsed.orgId === 'string' ? parsed.orgId : undefined;
+    const envelopeType =
+      channel === 'pulse:alerts'
+        ? 'alert'
+        : channel === 'pulse:token_events'
+          ? 'token_event'
+          : 'session_update';
+    broadcastToDashboard(wss, { type: envelopeType, data: parsed }, payloadOrgId);
   });
 
   wss.on('connection', async (ws: TaggedWebSocket, req) => {
@@ -98,6 +132,20 @@ export function createWsServer(server: Server): WebSocketServer {
 
       ws.orgId = resolved.orgId;
       ws.tenantPrisma = createTenantPrisma(resolved.orgId);
+    } else {
+      // Dashboard connections authenticate via Clerk Bearer token so broadcasts
+      // can be org-scoped. Token must arrive as a ?token=<jwt> query param.
+      const token = url.searchParams.get('token');
+      if (!token) {
+        ws.close(4001, 'Authentication token required');
+        return;
+      }
+      const resolved = await resolveClerkTokenForWs(token).catch(() => null);
+      if (!resolved) {
+        ws.close(4001, 'Invalid or expired token');
+        return;
+      }
+      ws.orgId = resolved.orgId;
     }
 
     ws.on('pong', () => { ws.isAlive = true; });
@@ -107,7 +155,13 @@ export function createWsServer(server: Server): WebSocketServer {
         const msg = JSON.parse(raw.toString());
         if (ws.role === 'agent') {
           handleAgentMessage(msg, ws).catch(() => {});
-          broadcast(wss, { type: msg.type, data: msg.data }, 'dashboard');
+          // Tag direct relay with the agent's orgId so dashboard clients in
+          // other orgs don't see it.
+          const relayData =
+            msg.data && typeof msg.data === 'object'
+              ? { ...msg.data, orgId: ws.orgId }
+              : msg.data;
+          broadcastToDashboard(wss, { type: msg.type, data: relayData }, ws.orgId);
         }
       } catch {
         // Ignore malformed messages
@@ -281,11 +335,22 @@ export function sendToAgent(sessionId: string, message: unknown): void {
   }
 }
 
-function broadcast(wss: WebSocketServer, message: unknown, targetRole: string): void {
+/**
+ * Broadcast a message to all dashboard clients, filtered by orgId for tenant isolation.
+ * If `payloadOrgId` is provided, only dashboard clients whose `orgId` matches will receive
+ * the message. A missing client `orgId` or missing payload `orgId` is permissive — this
+ * defensively handles the rollout window where legacy payloads may lack orgId.
+ */
+function broadcastToDashboard(
+  wss: WebSocketServer,
+  message: unknown,
+  payloadOrgId?: string,
+): void {
   const payload = JSON.stringify(message);
   wss.clients.forEach((client: TaggedWebSocket) => {
-    if (client.role === targetRole && client.readyState === WebSocket.OPEN) {
-      client.send(payload);
-    }
+    if (client.role !== 'dashboard') return;
+    if (client.readyState !== WebSocket.OPEN) return;
+    if (client.orgId && payloadOrgId && client.orgId !== payloadOrgId) return;
+    client.send(payload);
   });
 }

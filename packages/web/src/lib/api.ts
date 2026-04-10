@@ -6,6 +6,11 @@ export function setTokenProvider(fn: () => Promise<string | null>) {
   getTokenFn = fn;
 }
 
+/** Exposed so non-fetch consumers (e.g. WebSocket hook) can get a fresh token. */
+export async function getAuthToken(): Promise<string | null> {
+  return getTokenFn ? getTokenFn() : null;
+}
+
 export async function fetchApi<T>(path: string, options?: RequestInit): Promise<T> {
   const token = getTokenFn ? await getTokenFn() : null;
 
