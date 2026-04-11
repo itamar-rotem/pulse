@@ -119,7 +119,7 @@ describe('InsightGenerator', () => {
         metadata: {
           suggestedRule: {
             type: 'MODEL_RESTRICTION',
-            scope: { projectName: 'alpha' },
+            scope: { projectId: 'proj-alpha' },
             condition: { allowedModels: ['claude-sonnet-4-6'] },
             action: 'BLOCK',
           },
