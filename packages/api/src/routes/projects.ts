@@ -194,6 +194,22 @@ projectsRouter.post('/:id/restore', requireRole('OWNER', 'ADMIN'), async (req, r
       where: { id: req.params.id as string },
       data: { status: 'ACTIVE', archivedAt: null },
     });
+
+    // Re-materialize the budget rule that DELETE/archive disabled, so that
+    // archive → restore does not silently leave budget caps off.
+    if (
+      typeof (updated as { monthlyBudgetUsd?: number | null }).monthlyBudgetUsd === 'number' &&
+      ((updated as { monthlyBudgetUsd: number }).monthlyBudgetUsd) > 0
+    ) {
+      await syncBudgetRule(
+        req.auth!.orgId,
+        updated.id,
+        updated.name,
+        (updated as { monthlyBudgetUsd: number }).monthlyBudgetUsd,
+        req.prisma!,
+      );
+    }
+
     res.json(updated);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
