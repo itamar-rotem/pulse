@@ -46,7 +46,7 @@ projectsRouter.get('/', async (req, res) => {
 projectsRouter.get('/:id', async (req, res) => {
   try {
     const project = await req.prisma!.project.findUnique({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
     });
     if (!project) {
       res.status(404).json({ error: 'Project not found' });
@@ -150,7 +150,7 @@ projectsRouter.patch('/:id', requireRole('OWNER', 'ADMIN'), async (req, res) => 
     }
 
     const updated = await req.prisma!.project.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       data,
     });
 
@@ -177,7 +177,7 @@ projectsRouter.patch('/:id', requireRole('OWNER', 'ADMIN'), async (req, res) => 
 projectsRouter.delete('/:id', requireRole('OWNER', 'ADMIN'), async (req, res) => {
   try {
     const updated = await req.prisma!.project.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       data: { status: 'ARCHIVED', archivedAt: new Date() },
     });
     await disableBudgetRule(updated.id, req.prisma!);
@@ -191,7 +191,7 @@ projectsRouter.delete('/:id', requireRole('OWNER', 'ADMIN'), async (req, res) =>
 projectsRouter.post('/:id/restore', requireRole('OWNER', 'ADMIN'), async (req, res) => {
   try {
     const updated = await req.prisma!.project.update({
-      where: { id: req.params.id },
+      where: { id: req.params.id as string },
       data: { status: 'ACTIVE', archivedAt: null },
     });
     res.json(updated);

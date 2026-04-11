@@ -12,6 +12,9 @@ insightsRouter.get('/', async (req, res) => {
     const where: Record<string, unknown> = {};
     if (req.query.category) where.category = req.query.category;
     if (req.query.status) where.status = req.query.status;
+    if (req.query.projectId) {
+      where.metadata = { path: ['projectId'], equals: req.query.projectId as string };
+    }
 
     const [insights, total] = await Promise.all([
       req.prisma!.insight.findMany({ where, orderBy: { createdAt: 'desc' }, skip, take: limit }),

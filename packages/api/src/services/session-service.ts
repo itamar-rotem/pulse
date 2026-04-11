@@ -130,7 +130,8 @@ export async function getSessionHistory(
     page?: number;
     limit?: number;
     tool?: string;
-    projectSlug?: string;
+    projectSlug?: string; // deprecated but preserved for back-compat
+    projectId?: string;
     sessionType?: string;
     startDate?: string;
     endDate?: string;
@@ -143,6 +144,7 @@ export async function getSessionHistory(
 
   const where: Record<string, unknown> = {};
   if (query.tool) where.tool = query.tool;
+  if (query.projectId) where.projectId = query.projectId;
   if (query.projectSlug) where.projectSlug = query.projectSlug;
   if (query.sessionType) where.sessionType = query.sessionType;
   if (query.startDate || query.endDate) {
@@ -171,17 +173,21 @@ export async function getSessionById(id: string, db: PrismaClient) {
   });
 }
 
-export async function getLiveSummary(db: PrismaClient) {
+export async function getLiveSummary(
+  db: PrismaClient,
+  opts: { projectId?: string } = {},
+) {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
+  const projectFilter = opts.projectId ? { projectId: opts.projectId } : {};
 
   const [activeSessions, todayStats] = await Promise.all([
     db.session.findMany({
-      where: { endedAt: null },
+      where: { endedAt: null, ...projectFilter },
       orderBy: { startedAt: 'desc' },
     }),
     db.session.aggregate({
-      where: { startedAt: { gte: todayStart } },
+      where: { startedAt: { gte: todayStart }, ...projectFilter },
       _sum: { costUsd: true },
       _count: true,
     }),
@@ -189,17 +195,17 @@ export async function getLiveSummary(db: PrismaClient) {
 
   const [humanStats, agentStats, tokenTotals] = await Promise.all([
     db.session.aggregate({
-      where: { startedAt: { gte: todayStart }, sessionType: 'human' },
+      where: { startedAt: { gte: todayStart }, sessionType: 'human', ...projectFilter },
       _sum: { costUsd: true },
       _count: true,
     }),
     db.session.aggregate({
-      where: { startedAt: { gte: todayStart }, sessionType: { not: 'human' } },
+      where: { startedAt: { gte: todayStart }, sessionType: { not: 'human' }, ...projectFilter },
       _sum: { costUsd: true },
       _count: true,
     }),
     db.session.aggregate({
-      where: { startedAt: { gte: todayStart } },
+      where: { startedAt: { gte: todayStart }, ...projectFilter },
       _sum: {
         inputTokens: true,
         outputTokens: true,

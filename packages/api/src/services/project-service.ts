@@ -57,13 +57,14 @@ export async function syncBudgetRule(
   } else {
     await db.rule.create({
       data: {
+        orgId,
         name: `Budget: ${projectName}`,
         type: 'COST_CAP_PROJECT',
         scope: { projectId } as any,
         condition: { maxCost: monthlyBudgetUsd, period: 'monthly' } as any,
         action: 'ALERT',
         enabled: true,
-      },
+      } as any,
     });
   }
 }

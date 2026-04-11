@@ -143,6 +143,7 @@ export interface AlertFilters {
   severity?: Severity;
   type?: AlertType;
   since?: string;
+  projectId?: string;
   page?: number;
   limit?: number;
 }
