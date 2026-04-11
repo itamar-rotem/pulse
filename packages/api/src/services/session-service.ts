@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { publishTokenEvent, publishSessionUpdate } from './redis.js';
+import { upsertProjectForAgent } from './project-service.js';
 
 export async function startSession(
   data: {
@@ -8,15 +9,19 @@ export async function startSession(
     projectSlug: string;
     sessionType: string;
     model: string;
+    orgId: string; // explicit orgId for race-safe project upsert
   },
   db: PrismaClient,
 ) {
+  const project = await upsertProjectForAgent(data.orgId, data.projectSlug);
+
   const session = await db.session.create({
     // orgId auto-injected by tenant-scoped client
     data: {
       id: data.id,
       tool: data.tool,
       projectSlug: data.projectSlug,
+      projectId: project.id,
       sessionType: data.sessionType,
       model: data.model,
     } as any,
@@ -41,9 +46,20 @@ export async function updateSession(
     tool: string;
     projectSlug: string;
     sessionType: string;
+    orgId: string; // explicit orgId for race-safe project upsert fallback
   },
   db: PrismaClient,
 ) {
+  // Reuse the session's existing projectId; fall back to an upsert for the
+  // edge case where a token_event arrives before the session row is visible.
+  const existing = await db.session.findUnique({
+    where: { id: data.sessionId },
+    select: { projectId: true },
+  });
+  const projectId =
+    existing?.projectId ??
+    (await upsertProjectForAgent(data.orgId, data.projectSlug)).id;
+
   const event = await db.tokenEvent.create({
     // orgId auto-injected by tenant-scoped client
     data: {
@@ -51,6 +67,7 @@ export async function updateSession(
       tool: data.tool,
       model: data.model,
       projectSlug: data.projectSlug,
+      projectId,
       sessionType: data.sessionType,
       inputTokens: data.inputTokens,
       outputTokens: data.outputTokens,
