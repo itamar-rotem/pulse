@@ -1,6 +1,6 @@
 {
   "name": "@pulse/api",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "scripts": {
@@ -11,7 +11,8 @@
     "test:watch": "vitest",
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
-    "db:studio": "prisma studio"
+    "db:studio": "prisma studio",
+    "db:backfill-projects": "tsx prisma/backfill-projects.ts"
   },
   "dependencies": {
     "@clerk/backend": "^3.2.8",

@@ -36,7 +36,7 @@ describe('RuleEngine', () => {
 
       const violations = await ruleEngine.evaluate(
         { sessionId: 's1', burnRatePerMin: 1000, model: 'claude-sonnet-4-6' } as any,
-        { id: 's1', costUsd: 55, projectSlug: 'my-project', sessionType: 'human', startedAt: new Date() } as any,
+        { id: 's1', costUsd: 55, projectSlug: 'my-project', projectId: 'proj-my-project', sessionType: 'human', startedAt: new Date() } as any,
         TEST_ORG,
       );
 
@@ -53,7 +53,7 @@ describe('RuleEngine', () => {
 
       const violations = await ruleEngine.evaluate(
         { sessionId: 's1', burnRatePerMin: 1000, model: 'claude-sonnet-4-6' } as any,
-        { id: 's1', costUsd: 30, projectSlug: 'my-project', sessionType: 'human', startedAt: new Date() } as any,
+        { id: 's1', costUsd: 30, projectSlug: 'my-project', projectId: 'proj-my-project', sessionType: 'human', startedAt: new Date() } as any,
         TEST_ORG,
       );
 
@@ -64,12 +64,12 @@ describe('RuleEngine', () => {
   describe('evaluate — MODEL_RESTRICTION', () => {
     it('returns BLOCK violation when model not in allowed list', async () => {
       ruleEngine._setRulesForTest(TEST_ORG, [
-        { id: 'r2', orgId: TEST_ORG, name: 'Sonnet only', type: 'MODEL_RESTRICTION', scope: { projectName: 'beta' }, condition: { allowedModels: ['claude-sonnet-4-6'] }, action: 'BLOCK', enabled: true },
+        { id: 'r2', orgId: TEST_ORG, name: 'Sonnet only', type: 'MODEL_RESTRICTION', scope: { projectId: 'proj-beta' }, condition: { allowedModels: ['claude-sonnet-4-6'] }, action: 'BLOCK', enabled: true },
       ]);
 
       const violations = await ruleEngine.evaluate(
         { sessionId: 's1', model: 'claude-opus-4-6', burnRatePerMin: 500 } as any,
-        { id: 's1', costUsd: 10, projectSlug: 'beta', sessionType: 'human', startedAt: new Date() } as any,
+        { id: 's1', costUsd: 10, projectSlug: 'beta', projectId: 'proj-beta', sessionType: 'human', startedAt: new Date() } as any,
         TEST_ORG,
       );
 
@@ -79,12 +79,12 @@ describe('RuleEngine', () => {
 
     it('skips rule when project does not match scope', async () => {
       ruleEngine._setRulesForTest(TEST_ORG, [
-        { id: 'r2', orgId: TEST_ORG, name: 'Sonnet only', type: 'MODEL_RESTRICTION', scope: { projectName: 'beta' }, condition: { allowedModels: ['claude-sonnet-4-6'] }, action: 'BLOCK', enabled: true },
+        { id: 'r2', orgId: TEST_ORG, name: 'Sonnet only', type: 'MODEL_RESTRICTION', scope: { projectId: 'proj-beta' }, condition: { allowedModels: ['claude-sonnet-4-6'] }, action: 'BLOCK', enabled: true },
       ]);
 
       const violations = await ruleEngine.evaluate(
         { sessionId: 's1', model: 'claude-opus-4-6', burnRatePerMin: 500 } as any,
-        { id: 's1', costUsd: 10, projectSlug: 'alpha', sessionType: 'human', startedAt: new Date() } as any,
+        { id: 's1', costUsd: 10, projectSlug: 'alpha', projectId: 'proj-alpha', sessionType: 'human', startedAt: new Date() } as any,
         TEST_ORG,
       );
 
@@ -100,7 +100,7 @@ describe('RuleEngine', () => {
 
       const violations = await ruleEngine.evaluate(
         { sessionId: 's1', burnRatePerMin: 15000, model: 'claude-sonnet-4-6' } as any,
-        { id: 's1', costUsd: 5, projectSlug: 'alpha', sessionType: 'human', startedAt: new Date() } as any,
+        { id: 's1', costUsd: 5, projectSlug: 'alpha', projectId: 'proj-alpha', sessionType: 'human', startedAt: new Date() } as any,
         TEST_ORG,
       );
 
@@ -119,7 +119,7 @@ describe('RuleEngine', () => {
 
       const violations = await ruleEngine.evaluate(
         { sessionId: 's1', burnRatePerMin: 1000, model: 'claude-sonnet-4-6' } as any,
-        { id: 's1', costUsd: 5, projectSlug: 'alpha', sessionType: 'human', startedAt: twoHoursAgo } as any,
+        { id: 's1', costUsd: 5, projectSlug: 'alpha', projectId: 'proj-alpha', sessionType: 'human', startedAt: twoHoursAgo } as any,
         TEST_ORG,
       );
 
@@ -136,7 +136,7 @@ describe('RuleEngine', () => {
 
       const violations = await ruleEngine.evaluate(
         { sessionId: 's1', burnRatePerMin: 100, model: 'claude-sonnet-4-6' } as any,
-        { id: 's1', costUsd: 15, projectSlug: 'anything', sessionType: 'agent_local', startedAt: new Date() } as any,
+        { id: 's1', costUsd: 15, projectSlug: 'anything', projectId: 'proj-anything', sessionType: 'agent_local', startedAt: new Date() } as any,
         TEST_ORG,
       );
 
@@ -150,7 +150,7 @@ describe('RuleEngine', () => {
 
       const violations = await ruleEngine.evaluate(
         { sessionId: 's1', burnRatePerMin: 100, model: 'claude-sonnet-4-6' } as any,
-        { id: 's1', costUsd: 15, projectSlug: 'test', sessionType: 'human', startedAt: new Date() } as any,
+        { id: 's1', costUsd: 15, projectSlug: 'test', projectId: 'proj-test', sessionType: 'human', startedAt: new Date() } as any,
         TEST_ORG,
       );
 
@@ -167,7 +167,7 @@ describe('RuleEngine', () => {
 
       const violations = await ruleEngine.evaluate(
         { sessionId: 's1', burnRatePerMin: 1000, model: 'claude-sonnet-4-6' } as any,
-        { id: 's1', costUsd: 10, projectSlug: 'proj', sessionType: 'human', startedAt: new Date() } as any,
+        { id: 's1', costUsd: 10, projectSlug: 'proj', projectId: 'proj-proj', sessionType: 'human', startedAt: new Date() } as any,
         TEST_ORG,
       );
 
@@ -187,7 +187,7 @@ describe('RuleEngine', () => {
 
       const violations = await ruleEngine.evaluate(
         { sessionId: 's1', burnRatePerMin: 1000, model: 'claude-sonnet-4-6' } as any,
-        { id: 's1', costUsd: 10, projectSlug: 'proj', sessionType: 'human', startedAt: new Date() } as any,
+        { id: 's1', costUsd: 10, projectSlug: 'proj', projectId: 'proj-proj', sessionType: 'human', startedAt: new Date() } as any,
         TEST_ORG,
       );
 
@@ -199,24 +199,24 @@ describe('RuleEngine', () => {
   describe('evaluate — COST_CAP_PROJECT', () => {
     it('detects violation using Redis cached value', async () => {
       ruleEngine._setRulesForTest(TEST_ORG, [
-        { id: 'r6', orgId: TEST_ORG, name: 'Project cap', type: 'COST_CAP_PROJECT', scope: { projectName: 'alpha' }, condition: { maxCost: 500, period: 'monthly' }, action: 'ALERT', enabled: true },
+        { id: 'r6', orgId: TEST_ORG, name: 'Project cap', type: 'COST_CAP_PROJECT', scope: { projectId: 'proj-alpha' }, condition: { maxCost: 500, period: 'monthly' }, action: 'ALERT', enabled: true },
       ]);
       mockRedis.get.mockResolvedValue('600');
 
       const violations = await ruleEngine.evaluate(
         { sessionId: 's1', burnRatePerMin: 1000, model: 'claude-sonnet-4-6' } as any,
-        { id: 's1', costUsd: 10, projectSlug: 'alpha', sessionType: 'human', startedAt: new Date() } as any,
+        { id: 's1', costUsd: 10, projectSlug: 'alpha', projectId: 'proj-alpha', sessionType: 'human', startedAt: new Date() } as any,
         TEST_ORG,
       );
 
       expect(violations).toHaveLength(1);
       expect(violations[0].ruleType).toBe('COST_CAP_PROJECT');
-      expect(mockRedis.get).toHaveBeenCalledWith(`pulse:project_cost:${TEST_ORG}:alpha:monthly`);
+      expect(mockRedis.get).toHaveBeenCalledWith(`pulse:project_cost:${TEST_ORG}:proj-alpha:monthly`);
     });
 
     it('falls back to DB and writes back to Redis on cache miss', async () => {
       ruleEngine._setRulesForTest(TEST_ORG, [
-        { id: 'r6', orgId: TEST_ORG, name: 'Project cap', type: 'COST_CAP_PROJECT', scope: { projectName: 'alpha' }, condition: { maxCost: 500, period: 'weekly' }, action: 'ALERT', enabled: true },
+        { id: 'r6', orgId: TEST_ORG, name: 'Project cap', type: 'COST_CAP_PROJECT', scope: { projectId: 'proj-alpha' }, condition: { maxCost: 500, period: 'weekly' }, action: 'ALERT', enabled: true },
       ]);
       mockRedis.get.mockResolvedValue(null);
       mockRedis.set.mockResolvedValue('OK');
@@ -224,13 +224,13 @@ describe('RuleEngine', () => {
 
       const violations = await ruleEngine.evaluate(
         { sessionId: 's1', burnRatePerMin: 1000, model: 'claude-sonnet-4-6' } as any,
-        { id: 's1', costUsd: 10, projectSlug: 'alpha', sessionType: 'human', startedAt: new Date() } as any,
+        { id: 's1', costUsd: 10, projectSlug: 'alpha', projectId: 'proj-alpha', sessionType: 'human', startedAt: new Date() } as any,
         TEST_ORG,
       );
 
       expect(violations).toHaveLength(1);
       expect(mockRedis.set).toHaveBeenCalledWith(
-        `pulse:project_cost:${TEST_ORG}:alpha:weekly`,
+        `pulse:project_cost:${TEST_ORG}:proj-alpha:weekly`,
         '600',
         'EX',
         7 * 86400,

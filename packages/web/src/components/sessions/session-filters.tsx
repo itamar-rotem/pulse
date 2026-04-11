@@ -1,15 +1,17 @@
 'use client';
 
+import type { Project } from '@/hooks/use-projects';
+
 interface SessionFiltersProps {
   sessionType: string;
   onSessionTypeChange: (value: string) => void;
-  project: string;
-  onProjectChange: (value: string) => void;
+  projectId: string;
+  onProjectIdChange: (value: string) => void;
   model: string;
   onModelChange: (value: string) => void;
   timeRange: string;
   onTimeRangeChange: (value: string) => void;
-  projects: string[];
+  projects: Project[];
   models: string[];
 }
 
@@ -45,8 +47,8 @@ function FilterPill({
 export function SessionFilters({
   sessionType,
   onSessionTypeChange,
-  project,
-  onProjectChange,
+  projectId,
+  onProjectIdChange,
   model,
   onModelChange,
   timeRange,
@@ -68,11 +70,11 @@ export function SessionFilters({
       />
       <FilterPill
         label="Project"
-        value={project}
-        onChange={onProjectChange}
+        value={projectId}
+        onChange={onProjectIdChange}
         options={[
           { value: 'all', label: 'All Projects' },
-          ...projects.map((p) => ({ value: p, label: p })),
+          ...projects.map((p) => ({ value: p.id, label: p.name })),
         ]}
       />
       <FilterPill

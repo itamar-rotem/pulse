@@ -8,6 +8,7 @@ import { alertsRouter } from './routes/alerts.js';
 import { insightsRouter } from './routes/insights.js';
 import { webhooksRouter } from './routes/webhooks.js';
 import { apiKeysRouter } from './routes/api-keys.js';
+import { projectsRouter } from './routes/projects.js';
 import { clerkWebhookRouter } from './routes/clerk-webhook.js';
 import { setupRouter } from './routes/setup.js';
 import { authMiddleware } from './middleware/auth.js';
@@ -37,6 +38,7 @@ export function createApp(): Express {
   app.use('/api/insights', authMiddleware, tenantMiddleware, insightsRouter);
   app.use('/api/webhooks', authMiddleware, tenantMiddleware, webhooksRouter);
   app.use('/api/api-keys', authMiddleware, tenantMiddleware, apiKeysRouter);
+  app.use('/api/projects', authMiddleware, tenantMiddleware, projectsRouter);
 
   return app;
 }

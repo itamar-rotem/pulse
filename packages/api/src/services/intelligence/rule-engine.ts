@@ -17,6 +17,7 @@ interface SessionContext {
   id: string;
   costUsd: number;
   projectSlug: string;
+  projectId: string;
   sessionType: string;
   startedAt: Date | string;
 }
@@ -74,10 +75,10 @@ class RuleEngine {
 
   private matchesScope(scope: RuleScope, session: SessionContext, _event: EventContext): boolean {
     if (scope.global) return true;
-    if (scope.projectName && session.projectSlug !== scope.projectName) return false;
+    if (scope.projectId && session.projectId !== scope.projectId) return false;
     if (scope.sessionType && session.sessionType !== scope.sessionType) return false;
     // If scope has specific project or session type and they match, return true
-    return !!(scope.projectName || scope.sessionType);
+    return !!(scope.projectId || scope.sessionType);
   }
 
   private async evaluateRule(
@@ -161,7 +162,9 @@ class RuleEngine {
   private async checkCostCapProject(rule: CachedRule, session: SessionContext): Promise<RuleViolation | null> {
     const maxCost = rule.condition.maxCost ?? Infinity;
     const period = rule.condition.period ?? 'daily';
-    const cacheKey = `pulse:project_cost:${rule.orgId}:${session.projectSlug}:${period}`;
+    const scope = rule.scope;
+    const projectId = scope.projectId ?? session.projectId;
+    const cacheKey = `pulse:project_cost:${rule.orgId}:${projectId}:${period}`;
 
     let projectCost = 0;
 
@@ -185,7 +188,7 @@ class RuleEngine {
       const result = await globalPrisma.session.aggregate({
         where: {
           orgId: rule.orgId,
-          projectSlug: session.projectSlug,
+          projectId,
           startedAt: { gte: periodStart },
         },
         _sum: { costUsd: true },

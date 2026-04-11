@@ -87,6 +87,7 @@ class AlertManager {
     if (filters.severity) where.severity = filters.severity;
     if (filters.type) where.type = filters.type;
     if (filters.since) where.createdAt = { gte: new Date(filters.since) };
+    if (filters.projectId) where.session = { is: { projectId: filters.projectId } };
 
     const [alerts, total] = await Promise.all([
       db.alert.findMany({

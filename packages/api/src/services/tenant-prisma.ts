@@ -1,7 +1,8 @@
 import { prisma } from './prisma.js';
 
+// Added in Sub-project 5 Task 1 — enforces tenant isolation on Project from the start.
 const TENANT_MODELS = new Set([
-  'Session', 'TokenEvent', 'Rule', 'Alert', 'Insight', 'Webhook', 'ApiKey',
+  'Alert', 'ApiKey', 'Insight', 'Project', 'Rule', 'Session', 'TokenEvent', 'Webhook',
 ]);
 
 export function createTenantPrisma(orgId: string) {

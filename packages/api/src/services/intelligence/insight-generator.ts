@@ -48,9 +48,10 @@ class InsightGenerator {
     const insights: Insight[] = [];
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
-    // Find projects using opus-class models with low avg output
+    // Find projects using opus-class models with low avg output.
+    // Group by projectId (canonical FK) and projectSlug (for display).
     const projectStats = await db.session.groupBy({
-      by: ['projectSlug'],
+      by: ['projectId', 'projectSlug'],
       where: {
         model: { contains: 'opus' },
         startedAt: { gte: sevenDaysAgo },
@@ -66,7 +67,7 @@ class InsightGenerator {
       if (!stat._avg.outputTokens || stat._avg.outputTokens > 500) continue;
 
       const estimatedSavings = (stat._sum.costUsd ?? 0) * 0.6; // Sonnet is ~60% cheaper
-      const key = dedupKey('COST_OPTIMIZATION', { projectName: stat.projectSlug, suggestion: 'downgrade_model' });
+      const key = dedupKey('COST_OPTIMIZATION', { projectId: stat.projectId, suggestion: 'downgrade_model' });
 
       const existing = await db.insight.findFirst({
         where: {
@@ -85,12 +86,13 @@ class InsightGenerator {
           description: `${stat._count.id} Opus sessions in the last 7 days averaged only ${Math.round(stat._avg.outputTokens)} output tokens. Sonnet can handle this workload at ~60% lower cost.`,
           impact: { estimatedSavings: Math.round(estimatedSavings * 100) / 100, confidence: 0.8 },
           metadata: {
+            projectId: stat.projectId,
             projectName: stat.projectSlug,
             sessionCount: stat._count.id,
             avgOutputTokens: Math.round(stat._avg.outputTokens),
             suggestedRule: {
               type: 'MODEL_RESTRICTION',
-              scope: { projectName: stat.projectSlug },
+              scope: { projectId: stat.projectId },
               condition: { allowedModels: ['claude-sonnet-4-6', 'claude-haiku-4-5'] },
               action: 'BLOCK',
             },
@@ -111,7 +113,7 @@ class InsightGenerator {
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
     const projectSpend = await db.session.groupBy({
-      by: ['projectSlug'],
+      by: ['projectId', 'projectSlug'],
       where: { startedAt: { gte: sevenDaysAgo } },
       _sum: { costUsd: true },
     });
@@ -124,7 +126,7 @@ class InsightGenerator {
       const percentage = cost / totalSpend;
       if (percentage < 0.5) continue; // Only flag >50% concentration
 
-      const key = dedupKey('USAGE_PATTERN', { topProject: project.projectSlug });
+      const key = dedupKey('USAGE_PATTERN', { topProjectId: project.projectId });
       const existing = await db.insight.findFirst({
         where: {
           dedupKey: key,
@@ -141,7 +143,13 @@ class InsightGenerator {
           title: `"${project.projectSlug}" accounts for ${Math.round(percentage * 100)}% of spend`,
           description: `In the last 7 days, "${project.projectSlug}" cost $${cost.toFixed(2)} out of $${totalSpend.toFixed(2)} total. Consider setting a project cost cap.`,
           impact: { percentChange: Math.round(percentage * 100) },
-          metadata: { projectName: project.projectSlug, cost, totalSpend, percentage },
+          metadata: {
+            projectId: project.projectId,
+            projectName: project.projectSlug,
+            cost,
+            totalSpend,
+            percentage,
+          },
           dedupKey: key,
         } as any,
       });

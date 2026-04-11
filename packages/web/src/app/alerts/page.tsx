@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Bell, ExternalLink, X, Eye } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { StatTag } from '@/components/ui/stat-tag';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useAlerts, markAlertRead, dismissAlert, batchMarkAlertsRead } from '@/hooks/use-intelligence';
+import { useProjects } from '@/hooks/use-projects';
 import { formatRelativeTime } from '@/lib/format';
 import type { AlertStatus, Severity, AlertType } from '@pulse/shared';
 
@@ -23,12 +25,27 @@ const TYPE_LABEL: Record<AlertType, string> = {
 };
 
 export default function AlertsPage() {
+  return (
+    <Suspense fallback={null}>
+      <AlertsPageInner />
+    </Suspense>
+  );
+}
+
+function AlertsPageInner() {
+  const searchParams = useSearchParams();
   const { connected } = useWebSocket(() => {});
   const [statusFilter, setStatusFilter] = useState<AlertStatus | ''>('');
   const [severityFilter, setSeverityFilter] = useState<Severity | ''>('');
+  const [projectFilter, setProjectFilter] = useState<string>(
+    searchParams.get('projectId') ?? '',
+  );
+  const { data: projectsData } = useProjects({ status: 'all' });
+  const projects = projectsData?.projects ?? [];
   const { data, mutate } = useAlerts({
     status: statusFilter || undefined,
     severity: severityFilter || undefined,
+    projectId: projectFilter || undefined,
     limit: 50,
   });
 
@@ -79,6 +96,19 @@ export default function AlertsPage() {
             <option value="CRITICAL">Critical</option>
             <option value="WARNING">Warning</option>
             <option value="INFO">Info</option>
+          </select>
+
+          <select
+            className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--text-2)]"
+            value={projectFilter}
+            onChange={(e) => setProjectFilter(e.target.value)}
+          >
+            <option value="">All Projects</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
           </select>
 
           <button

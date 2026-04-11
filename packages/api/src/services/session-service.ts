@@ -1,5 +1,6 @@
 import type { PrismaClient } from '@prisma/client';
 import { publishTokenEvent, publishSessionUpdate } from './redis.js';
+import { upsertProjectForAgent } from './project-service.js';
 
 export async function startSession(
   data: {
@@ -8,15 +9,19 @@ export async function startSession(
     projectSlug: string;
     sessionType: string;
     model: string;
+    orgId: string; // explicit orgId for race-safe project upsert
   },
   db: PrismaClient,
 ) {
+  const project = await upsertProjectForAgent(data.orgId, data.projectSlug);
+
   const session = await db.session.create({
     // orgId auto-injected by tenant-scoped client
     data: {
       id: data.id,
       tool: data.tool,
       projectSlug: data.projectSlug,
+      projectId: project.id,
       sessionType: data.sessionType,
       model: data.model,
     } as any,
@@ -41,9 +46,20 @@ export async function updateSession(
     tool: string;
     projectSlug: string;
     sessionType: string;
+    orgId: string; // explicit orgId for race-safe project upsert fallback
   },
   db: PrismaClient,
 ) {
+  // Reuse the session's existing projectId; fall back to an upsert for the
+  // edge case where a token_event arrives before the session row is visible.
+  const existing = await db.session.findUnique({
+    where: { id: data.sessionId },
+    select: { projectId: true },
+  });
+  const projectId =
+    existing?.projectId ??
+    (await upsertProjectForAgent(data.orgId, data.projectSlug)).id;
+
   const event = await db.tokenEvent.create({
     // orgId auto-injected by tenant-scoped client
     data: {
@@ -51,6 +67,7 @@ export async function updateSession(
       tool: data.tool,
       model: data.model,
       projectSlug: data.projectSlug,
+      projectId,
       sessionType: data.sessionType,
       inputTokens: data.inputTokens,
       outputTokens: data.outputTokens,
@@ -113,7 +130,8 @@ export async function getSessionHistory(
     page?: number;
     limit?: number;
     tool?: string;
-    projectSlug?: string;
+    projectSlug?: string; // deprecated but preserved for back-compat
+    projectId?: string;
     sessionType?: string;
     startDate?: string;
     endDate?: string;
@@ -126,6 +144,7 @@ export async function getSessionHistory(
 
   const where: Record<string, unknown> = {};
   if (query.tool) where.tool = query.tool;
+  if (query.projectId) where.projectId = query.projectId;
   if (query.projectSlug) where.projectSlug = query.projectSlug;
   if (query.sessionType) where.sessionType = query.sessionType;
   if (query.startDate || query.endDate) {
@@ -154,17 +173,21 @@ export async function getSessionById(id: string, db: PrismaClient) {
   });
 }
 
-export async function getLiveSummary(db: PrismaClient) {
+export async function getLiveSummary(
+  db: PrismaClient,
+  opts: { projectId?: string } = {},
+) {
   const todayStart = new Date();
   todayStart.setHours(0, 0, 0, 0);
+  const projectFilter = opts.projectId ? { projectId: opts.projectId } : {};
 
   const [activeSessions, todayStats] = await Promise.all([
     db.session.findMany({
-      where: { endedAt: null },
+      where: { endedAt: null, ...projectFilter },
       orderBy: { startedAt: 'desc' },
     }),
     db.session.aggregate({
-      where: { startedAt: { gte: todayStart } },
+      where: { startedAt: { gte: todayStart }, ...projectFilter },
       _sum: { costUsd: true },
       _count: true,
     }),
@@ -172,17 +195,17 @@ export async function getLiveSummary(db: PrismaClient) {
 
   const [humanStats, agentStats, tokenTotals] = await Promise.all([
     db.session.aggregate({
-      where: { startedAt: { gte: todayStart }, sessionType: 'human' },
+      where: { startedAt: { gte: todayStart }, sessionType: 'human', ...projectFilter },
       _sum: { costUsd: true },
       _count: true,
     }),
     db.session.aggregate({
-      where: { startedAt: { gte: todayStart }, sessionType: { not: 'human' } },
+      where: { startedAt: { gte: todayStart }, sessionType: { not: 'human' }, ...projectFilter },
       _sum: { costUsd: true },
       _count: true,
     }),
     db.session.aggregate({
-      where: { startedAt: { gte: todayStart } },
+      where: { startedAt: { gte: todayStart }, ...projectFilter },
       _sum: {
         inputTokens: true,
         outputTokens: true,

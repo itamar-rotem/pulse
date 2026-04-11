@@ -25,6 +25,7 @@ export function useAlerts(filters?: Partial<AlertFilters>) {
   if (filters?.status) params.set('status', filters.status);
   if (filters?.severity) params.set('severity', filters.severity);
   if (filters?.type) params.set('type', filters.type);
+  if (filters?.projectId) params.set('projectId', filters.projectId);
   if (filters?.page) params.set('page', String(filters.page));
   if (filters?.limit) params.set('limit', String(filters.limit));
   const query = params.toString() ? `?${params}` : '';
@@ -46,10 +47,11 @@ export function useRules() {
   });
 }
 
-export function useInsights(filters?: { category?: string; status?: string; page?: number; limit?: number }) {
+export function useInsights(filters?: { category?: string; status?: string; projectId?: string; page?: number; limit?: number }) {
   const params = new URLSearchParams();
   if (filters?.category) params.set('category', filters.category);
   if (filters?.status) params.set('status', filters.status);
+  if (filters?.projectId) params.set('projectId', filters.projectId);
   if (filters?.page) params.set('page', String(filters.page));
   if (filters?.limit) params.set('limit', String(filters.limit));
   const query = params.toString() ? `?${params}` : '';

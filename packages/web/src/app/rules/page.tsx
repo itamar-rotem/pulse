@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/ui/page-header';
 import { StatTag } from '@/components/ui/stat-tag';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useRules, toggleRule, createRule, deleteRule } from '@/hooks/use-intelligence';
+import { useProjects } from '@/hooks/use-projects';
 import { formatRelativeTime } from '@/lib/format';
 import type { RuleType, RuleAction, Rule } from '@pulse/shared';
 
@@ -27,6 +28,8 @@ const ACTION_VARIANT: Record<RuleAction, 'blue' | 'amber' | 'red'> = {
 export default function RulesPage() {
   const { connected } = useWebSocket(() => {});
   const { data: rules, mutate } = useRules();
+  const { data: projectsData } = useProjects({ status: 'active' });
+  const projects = projectsData?.projects ?? [];
   const [showCreate, setShowCreate] = useState(false);
 
   // Create form state
@@ -53,7 +56,7 @@ export default function RulesPage() {
   }
 
   async function handleCreate() {
-    const scope = formGlobal ? { global: true } : { projectName: formProject };
+    const scope = formGlobal ? { global: true } : { projectId: formProject };
 
     let condition: Record<string, unknown> = {};
     if (formType === 'COST_CAP_SESSION' || formType === 'COST_CAP_DAILY') {
@@ -77,7 +80,10 @@ export default function RulesPage() {
   function scopeDescription(rule: Rule): string {
     const scope = rule.scope as Record<string, unknown>;
     if (scope.global) return 'Global';
-    if (scope.projectName) return `Project: ${scope.projectName}`;
+    if (scope.projectId) {
+      const project = projects.find((p) => p.id === scope.projectId);
+      return `Project: ${project?.name ?? project?.slug ?? (scope.projectId as string)}`;
+    }
     if (scope.sessionType) return `Type: ${scope.sessionType}`;
     return 'Unknown scope';
   }
@@ -134,7 +140,18 @@ export default function RulesPage() {
                     <input type="checkbox" checked={formGlobal} onChange={(e) => setFormGlobal(e.target.checked)} /> Global
                   </label>
                   {!formGlobal && (
-                    <input className="flex-1 rounded-[8px] border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[13px]" value={formProject} onChange={(e) => setFormProject(e.target.value)} placeholder="Project name" />
+                    <select
+                      className="flex-1 rounded-[8px] border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[13px]"
+                      value={formProject}
+                      onChange={(e) => setFormProject(e.target.value)}
+                    >
+                      <option value="">Select project…</option>
+                      {projects.map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.name} ({p.slug})
+                        </option>
+                      ))}
+                    </select>
                   )}
                 </div>
               </div>
@@ -182,7 +199,7 @@ export default function RulesPage() {
 
             <div className="flex justify-end gap-2">
               <button onClick={() => setShowCreate(false)} className="rounded-[8px] border border-[var(--border)] px-4 py-2 text-[13px] font-medium text-[var(--text-2)]">Cancel</button>
-              <button onClick={handleCreate} disabled={!formName} className="rounded-[8px] bg-gradient-to-r from-[var(--accent)] to-[var(--accent-dark)] px-4 py-2 text-[13px] font-semibold text-white disabled:opacity-50">Create</button>
+              <button onClick={handleCreate} disabled={!formName || (!formGlobal && !formProject)} className="rounded-[8px] bg-gradient-to-r from-[var(--accent)] to-[var(--accent-dark)] px-4 py-2 text-[13px] font-semibold text-white disabled:opacity-50">Create</button>
             </div>
           </div>
         )}

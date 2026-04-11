@@ -210,6 +210,7 @@ async function handleAgentMessage(
       projectSlug: msg.data.projectSlug as string,
       sessionType: msg.data.sessionType as string,
       model: msg.data.model as string,
+      orgId,
     }, db).catch(() => {}); // ignore if session already exists
   } else if (msg.type === 'token_event') {
     const d = msg.data;
@@ -235,6 +236,7 @@ async function handleAgentMessage(
       tool: d.tool as string,
       projectSlug: d.projectSlug as string,
       sessionType: d.sessionType as string,
+      orgId,
     }, db);
 
     // Update daily cost counter in Redis (org-scoped), with TTL as belt-and-suspenders.
@@ -249,17 +251,18 @@ async function handleAgentMessage(
       pipeline.exec().catch(() => {});
     }
 
-    // Increment project cost counters in Redis (org-scoped), with period-appropriate TTLs
-    // so keys self-expire if the reset cron ever fails.
-    const projectSlug = d.projectSlug as string;
-    if (projectSlug) {
+    // Increment project cost counters in Redis (org-scoped), keyed by projectId
+    // (not slug) so project renames can't stale-key counters. The Session row
+    // already has projectId, which we resolved during updateSession.
+    const projectId = (result.session as { projectId?: string | null }).projectId;
+    if (projectId) {
       const periods: Array<['daily' | 'weekly' | 'monthly', number]> = [
         ['daily', 90000],      // 25h
         ['weekly', 691200],    // 8d
         ['monthly', 2764800],  // 32d
       ];
       for (const [period, ttl] of periods) {
-        const key = `pulse:project_cost:${orgId}:${projectSlug}:${period}`;
+        const key = `pulse:project_cost:${orgId}:${projectId}:${period}`;
         const pipeline = redis.pipeline();
         pipeline.incrbyfloat(key, cost);
         pipeline.expire(key, ttl, 'NX');

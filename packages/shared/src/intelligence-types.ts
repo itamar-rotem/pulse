@@ -31,7 +31,7 @@ export type SessionStatus = 'ACTIVE' | 'PAUSED' | 'ENDED';
 // ── Interfaces ─────────────────────────────────────
 
 export interface RuleScope {
-  projectName?: string;
+  projectId?: string;
   sessionType?: string;
   global?: boolean;
 }
@@ -143,6 +143,7 @@ export interface AlertFilters {
   severity?: Severity;
   type?: AlertType;
   since?: string;
+  projectId?: string;
   page?: number;
   limit?: number;
 }
