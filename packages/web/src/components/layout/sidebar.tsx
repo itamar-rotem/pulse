@@ -10,6 +10,7 @@ import {
   Settings,
   Key,
   Users,
+  Folder,
 } from 'lucide-react';
 import { UserButton, OrganizationSwitcher } from '@clerk/nextjs';
 import { NavItem } from '@/components/ui/nav-item';
@@ -61,6 +62,7 @@ export function Sidebar() {
             <NavItem href="/" label="Dashboard" icon={LayoutDashboard} />
             <NavItem href="/live" label="Live View" icon={Radio} />
             <NavItem href="/sessions" label="Sessions" icon={History} />
+            <NavItem href="/projects" label="Projects" icon={Folder} />
           </div>
         </div>
 
