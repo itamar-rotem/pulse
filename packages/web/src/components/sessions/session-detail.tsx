@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { StatCard } from '@/components/ui/stat-card';
 import { StatTag } from '@/components/ui/stat-tag';
 import { CostChart } from './cost-chart';
@@ -26,6 +27,7 @@ interface SessionDetailProps {
   session: {
     id: string;
     tool: string;
+    projectId: string;
     projectSlug: string;
     sessionType: string;
     model: string;
@@ -61,9 +63,12 @@ export function SessionDetail({ session }: SessionDetailProps) {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <h2 className="text-2xl font-bold text-[var(--text-1)]">
+        <Link
+          href={`/projects/${session.projectId}`}
+          className="text-2xl font-bold text-[var(--text-1)] hover:text-[var(--accent)]"
+        >
           {session.projectSlug}
-        </h2>
+        </Link>
         <StatTag variant={session.sessionType === 'human' ? 'blue' : 'purple'}>
           {session.sessionType}
         </StatTag>

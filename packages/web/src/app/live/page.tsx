@@ -1,17 +1,19 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useMemo } from 'react';
 import { PageHeader } from '@/components/ui/page-header';
 import { SessionCard } from '@/components/live/session-card';
 import { TokenStream } from '@/components/live/token-stream';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useLiveSummary } from '@/hooks/use-sessions';
+import { useProjects } from '@/hooks/use-projects';
 
 interface LiveSession {
   sessionId: string;
   tool: string;
   sessionType: string;
   model: string;
+  projectId?: string;
   projectSlug: string;
   cumulativeInputTokens: number;
   cumulativeOutputTokens: number;
@@ -32,7 +34,10 @@ interface StreamEvent {
 export default function LivePage() {
   const [sessions, setSessions] = useState<Map<string, LiveSession>>(new Map());
   const [streamEvents, setStreamEvents] = useState<StreamEvent[]>([]);
-  const { data: summary } = useLiveSummary();
+  const [projectFilter, setProjectFilter] = useState<string>('');
+  useLiveSummary();
+  const { data: projectsData } = useProjects({ status: 'all' });
+  const projects = projectsData?.projects ?? [];
 
   const handleMessage = useCallback((msg: { type: string; data: unknown }) => {
     if (msg.type === 'token_event') {
@@ -65,7 +70,11 @@ export default function LivePage() {
   }, []);
 
   const { connected } = useWebSocket(handleMessage);
-  const sessionList = Array.from(sessions.values());
+  const sessionList = useMemo(() => {
+    const list = Array.from(sessions.values());
+    if (!projectFilter) return list;
+    return list.filter((s) => s.projectId === projectFilter);
+  }, [sessions, projectFilter]);
 
   return (
     <div>
@@ -75,6 +84,21 @@ export default function LivePage() {
         connected={connected}
       />
       <div className="p-8 space-y-6">
+        <div className="flex items-center gap-2">
+          <span className="text-[11px] font-medium text-[var(--text-3)]">Project</span>
+          <select
+            value={projectFilter}
+            onChange={(e) => setProjectFilter(e.target.value)}
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[12px] font-medium text-[var(--text-1)] outline-none focus:border-[var(--accent)]"
+          >
+            <option value="">All Projects</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
         {sessionList.length > 0 ? (
           <div className="grid grid-cols-3 gap-4">
             {sessionList.map((s) => (

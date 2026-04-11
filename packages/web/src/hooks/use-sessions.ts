@@ -22,6 +22,7 @@ interface SessionHistoryData {
   sessions: Array<{
     id: string;
     tool: string;
+    projectId: string;
     projectSlug: string;
     sessionType: string;
     model: string;
@@ -39,6 +40,7 @@ interface SessionHistoryData {
 interface SessionDetailData {
   id: string;
   tool: string;
+  projectId: string;
   projectSlug: string;
   sessionType: string;
   model: string;

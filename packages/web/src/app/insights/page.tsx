@@ -1,11 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { Lightbulb, BarChart3, Zap, DollarSign, Check, X } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { StatTag } from '@/components/ui/stat-tag';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useInsights, dismissInsight, applyInsight } from '@/hooks/use-intelligence';
+import { useProjects } from '@/hooks/use-projects';
 import { formatRelativeTime, formatCost } from '@/lib/format';
 import type { InsightCategory, InsightStatus } from '@pulse/shared';
 import type { LucideIcon } from 'lucide-react';
@@ -18,12 +20,27 @@ const CATEGORY_CONFIG: Record<InsightCategory, { icon: LucideIcon; label: string
 };
 
 export default function InsightsPage() {
+  return (
+    <Suspense fallback={null}>
+      <InsightsPageInner />
+    </Suspense>
+  );
+}
+
+function InsightsPageInner() {
+  const searchParams = useSearchParams();
   const { connected } = useWebSocket(() => {});
   const [categoryFilter, setCategoryFilter] = useState<InsightCategory | ''>('');
   const [statusFilter, setStatusFilter] = useState<InsightStatus | ''>('ACTIVE');
+  const [projectFilter, setProjectFilter] = useState<string>(
+    searchParams.get('projectId') ?? '',
+  );
+  const { data: projectsData } = useProjects({ status: 'all' });
+  const projects = projectsData?.projects ?? [];
   const { data, mutate } = useInsights({
     category: categoryFilter || undefined,
     status: statusFilter || undefined,
+    projectId: projectFilter || undefined,
     limit: 50,
   });
 
@@ -67,6 +84,19 @@ export default function InsightsPage() {
             <option value="ACTIVE">Active</option>
             <option value="APPLIED">Applied</option>
             <option value="DISMISSED">Dismissed</option>
+          </select>
+
+          <select
+            className="rounded-[10px] border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-[13px] text-[var(--text-2)]"
+            value={projectFilter}
+            onChange={(e) => setProjectFilter(e.target.value)}
+          >
+            <option value="">All Projects</option>
+            {projects.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
           </select>
         </div>
 

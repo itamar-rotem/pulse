@@ -1,26 +1,44 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { Suspense, useState, useMemo, useEffect } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { PageHeader } from '@/components/ui/page-header';
 import { SessionTable } from '@/components/sessions/session-table';
 import { SessionFilters } from '@/components/sessions/session-filters';
 import { useSessionHistory } from '@/hooks/use-sessions';
+import { useProjects } from '@/hooks/use-projects';
 import { useWebSocket } from '@/hooks/use-websocket';
 
 export default function SessionsPage() {
+  return (
+    <Suspense fallback={null}>
+      <SessionsPageInner />
+    </Suspense>
+  );
+}
+
+function SessionsPageInner() {
+  const searchParams = useSearchParams();
+  const initialProjectId = searchParams.get('projectId') ?? 'all';
+
   const [page, setPage] = useState(1);
   const [sessionType, setSessionType] = useState('all');
-  const [project, setProject] = useState('all');
+  const [projectId, setProjectId] = useState(initialProjectId);
   const [model, setModel] = useState('all');
   const [timeRange, setTimeRange] = useState('24h');
 
   const { connected } = useWebSocket(() => {});
-  const { data } = useSessionHistory({ page: String(page), limit: '20' });
+  const { data: projectsData } = useProjects({ status: 'all' });
+  const projects = projectsData?.projects ?? [];
 
-  const projects = useMemo(() => {
-    if (!data?.sessions) return [];
-    return [...new Set(data.sessions.map((s) => s.projectSlug))];
-  }, [data]);
+  const historyParams: Record<string, string> = { page: String(page), limit: '20' };
+  if (projectId !== 'all') historyParams.projectId = projectId;
+  const { data } = useSessionHistory(historyParams);
+
+  // Reset to page 1 when project filter changes
+  useEffect(() => {
+    setPage(1);
+  }, [projectId]);
 
   const models = useMemo(() => {
     if (!data?.sessions) return [];
@@ -31,11 +49,10 @@ export default function SessionsPage() {
     if (!data?.sessions) return [];
     return data.sessions.filter((s) => {
       if (sessionType !== 'all' && s.sessionType !== sessionType) return false;
-      if (project !== 'all' && s.projectSlug !== project) return false;
       if (model !== 'all' && s.model !== model) return false;
       return true;
     });
-  }, [data, sessionType, project, model]);
+  }, [data, sessionType, model]);
 
   const totalPages = data ? Math.ceil(data.total / data.limit) : 0;
 
@@ -50,8 +67,8 @@ export default function SessionsPage() {
         <SessionFilters
           sessionType={sessionType}
           onSessionTypeChange={setSessionType}
-          project={project}
-          onProjectChange={setProject}
+          projectId={projectId}
+          onProjectIdChange={setProjectId}
           model={model}
           onModelChange={setModel}
           timeRange={timeRange}
