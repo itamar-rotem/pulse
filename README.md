@@ -53,7 +53,7 @@ packages/
   shared/   — TypeScript types, pricing tables, utilities
   agent/    — CLI background process that reads Claude Code session files
   api/      — Express + WebSocket API server with PostgreSQL
-  web/      — Next.js 14 dashboard with real-time updates
+  web/      — Next.js 16 dashboard with real-time updates
 ```
 
 ## Agent CLI
@@ -66,14 +66,33 @@ npx pulse-agent start
 npx pulse-agent status
 ```
 
-## Features (Phase 1)
+## Features
 
+### Observability (Phase 1)
 - Real-time token consumption monitoring for Claude Code
 - Session classification: human vs agent (CI/automation detection)
-- Project tagging via git remote URL
 - Live View dashboard with token gauge, burn rate, and cost meter
 - Session history with filtering and detail views
 - Per-model cost calculation (Opus, Sonnet, Haiku)
+
+### Intelligence Engine
+- Rule engine for budget caps, rate limits, and anomaly triggers
+- Multi-channel alerting (webhooks, in-app)
+- Automatic anomaly detection on cost spikes and error rates
+- Daily/weekly insight generation from session history
+
+### Multi-tenancy & Auth
+- Clerk-backed org/user auth with role-gated routes (`OWNER`/`ADMIN`/`MEMBER`)
+- Prisma query extension enforces per-org isolation on every read and write
+- Org-scoped API keys (legacy `AGENT_API_KEY` still supported, deprecated)
+
+### Multi-Project (v0.2.0)
+- First-class `Project` model with compound-unique `(orgId, slug)`
+- Projects auto-created on first agent session (race-safe via compound upsert)
+- Per-project monthly budget caps auto-materialize into `COST_CAP_PROJECT` rules
+- Archive/restore flow keeps budget rules in sync with project status
+- Project filter dropdowns across sessions, live, alerts, and insights
+- Projects list, detail, and settings pages with 30d cost + session aggregates
 
 ## Tech Stack
 
