@@ -154,17 +154,35 @@ projectsRouter.patch('/:id', requireRole('OWNER', 'ADMIN'), async (req, res) => 
       data,
     });
 
-    if (monthlyBudgetUsd !== undefined) {
-      await syncBudgetRule(
-        req.auth!.orgId,
-        updated.id,
-        updated.name,
-        typeof monthlyBudgetUsd === 'number' ? monthlyBudgetUsd : null,
-        req.prisma!,
-      );
-    }
-    if (status === 'ARCHIVED') {
-      await disableBudgetRule(updated.id, req.prisma!);
+    // Reconcile the budget rule to reflect the post-update project state.
+    // This makes archive, restore, and budget edits idempotent and consistent:
+    //   - ARCHIVED project → rule always disabled (never resurrected by a budget edit)
+    //   - ACTIVE project with budget > 0 → rule enabled + in sync
+    //   - ACTIVE project with null/0 budget → rule deleted
+    // We only touch the rule when this PATCH actually changed budget or status,
+    // so unrelated edits (name, color) don't pay the rule-sync cost.
+    if (monthlyBudgetUsd !== undefined || status !== undefined) {
+      const finalStatus = (updated as { status?: string }).status;
+      const finalBudget = (updated as { monthlyBudgetUsd?: number | null }).monthlyBudgetUsd;
+      if (finalStatus === 'ARCHIVED') {
+        await disableBudgetRule(updated.id, req.prisma!);
+      } else if (typeof finalBudget === 'number' && finalBudget > 0) {
+        await syncBudgetRule(
+          req.auth!.orgId,
+          updated.id,
+          updated.name,
+          finalBudget,
+          req.prisma!,
+        );
+      } else {
+        await syncBudgetRule(
+          req.auth!.orgId,
+          updated.id,
+          updated.name,
+          null,
+          req.prisma!,
+        );
+      }
     }
 
     res.json(updated);
