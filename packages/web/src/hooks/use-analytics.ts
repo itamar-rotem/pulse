@@ -64,7 +64,7 @@ export function useCostTrends(params: {
 }
 
 export function useBreakdown(params: {
-  groupBy?: 'project' | 'model' | 'sessionType';
+  groupBy?: 'project' | 'model' | 'sessionType' | 'user';
   days?: number;
   projectId?: string;
 } = {}) {
