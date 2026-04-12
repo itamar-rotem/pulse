@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useState, useMemo, useEffect } from 'react';
+import { Suspense, useState, useMemo, useCallback } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { PageHeader } from '@/components/ui/page-header';
 import { SessionTable } from '@/components/sessions/session-table';
@@ -31,14 +31,15 @@ function SessionsPageInner() {
   const { data: projectsData } = useProjects({ status: 'all' });
   const projects = projectsData?.projects ?? [];
 
+  // Reset to page 1 when project filter changes (avoids setState-in-effect)
+  const handleProjectIdChange = useCallback((id: string) => {
+    setProjectId(id);
+    setPage(1);
+  }, []);
+
   const historyParams: Record<string, string> = { page: String(page), limit: '20' };
   if (projectId !== 'all') historyParams.projectId = projectId;
   const { data } = useSessionHistory(historyParams);
-
-  // Reset to page 1 when project filter changes
-  useEffect(() => {
-    setPage(1);
-  }, [projectId]);
 
   const models = useMemo(() => {
     if (!data?.sessions) return [];
@@ -68,7 +69,7 @@ function SessionsPageInner() {
           sessionType={sessionType}
           onSessionTypeChange={setSessionType}
           projectId={projectId}
-          onProjectIdChange={setProjectId}
+          onProjectIdChange={handleProjectIdChange}
           model={model}
           onModelChange={setModel}
           timeRange={timeRange}
