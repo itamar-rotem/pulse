@@ -12,7 +12,9 @@
     "db:push": "prisma db push",
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
-    "db:backfill-projects": "tsx prisma/backfill-projects.ts"
+    "db:backfill-projects": "tsx prisma/backfill-projects.ts",
+    "db:seed": "tsx prisma/seed-default-org.ts",
+    "db:seed-demo": "tsx prisma/seed-default-org.ts && tsx prisma/seed-demo-data.ts"
   },
   "dependencies": {
     "@clerk/backend": "^3.2.8",
