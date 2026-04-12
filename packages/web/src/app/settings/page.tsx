@@ -1,13 +1,14 @@
 'use client';
 
 import { useState } from 'react';
-import { Send, Trash2, Plus } from 'lucide-react';
+import { Send, Trash2, Plus, RotateCcw } from 'lucide-react';
 import { PageHeader } from '@/components/ui/page-header';
 import { StatusDot } from '@/components/ui/status-dot';
 import { StatTag } from '@/components/ui/stat-tag';
 import { useWebSocket } from '@/hooks/use-websocket';
 import { useLiveSummary } from '@/hooks/use-sessions';
 import { useWebhooks, createWebhook, deleteWebhook, testWebhook } from '@/hooks/use-intelligence';
+import { fetchApi } from '@/lib/api';
 import { formatCost } from '@/lib/format';
 
 export default function SettingsPage() {
@@ -21,6 +22,7 @@ export default function SettingsPage() {
   const [whName, setWhName] = useState('');
   const [whUrl, setWhUrl] = useState('');
   const [whSecret, setWhSecret] = useState('');
+  const [whChannel, setWhChannel] = useState<'CUSTOM' | 'SLACK' | 'DISCORD'>('SLACK');
   const [whEvents, setWhEvents] = useState<string[]>(['RULE_BREACH', 'ANOMALY']);
   const [testResults, setTestResults] = useState<Record<string, { success: boolean; error?: string }>>({});
 
@@ -32,12 +34,18 @@ export default function SettingsPage() {
 
   async function handleCreateWebhook() {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await createWebhook({ name: whName, url: whUrl, events: whEvents, ...(whSecret ? { secret: whSecret } : {}) } as Record<string, unknown> as any);
+    await createWebhook({ name: whName, url: whUrl, events: whEvents, channel: whChannel, ...(whSecret ? { secret: whSecret } : {}) } as Record<string, unknown> as any);
     setShowAddWebhook(false);
     setWhName('');
     setWhUrl('');
     setWhSecret('');
+    setWhChannel('SLACK');
     setWhEvents(['RULE_BREACH', 'ANOMALY']);
+    mutateWebhooks();
+  }
+
+  async function handleReenableWebhook(id: string) {
+    await fetchApi(`/api/webhooks/${id}/enable`, { method: 'POST' });
     mutateWebhooks();
   }
 
@@ -128,46 +136,62 @@ export default function SettingsPage() {
 
         <Section title="Webhooks">
           <div className="space-y-3">
-            {webhooks?.map((wh) => (
-              <div key={wh.id} className={`flex items-center gap-3 py-2 ${!wh.enabled ? 'opacity-50' : ''}`}>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[13px] font-medium text-[var(--text-1)]">{wh.name}</span>
-                    {!wh.enabled && <StatTag variant="red">Disabled</StatTag>}
-                  </div>
-                  <div className="text-[12px] text-[var(--text-3)] mt-0.5 truncate">
-                    {wh.url.length > 50 ? wh.url.slice(0, 50) + '...' : wh.url}
-                  </div>
-                  <div className="flex items-center gap-1 mt-1">
-                    {(wh.events as string[]).map((ev) => (
-                      <StatTag key={ev} variant="neutral">{ev}</StatTag>
-                    ))}
-                  </div>
-                </div>
+            {webhooks?.map((wh) => {
+              const channel = (wh as unknown as Record<string, unknown>).channel as string | undefined;
+              const channelLabel = channel === 'SLACK' ? 'Slack' : channel === 'DISCORD' ? 'Discord' : 'Custom';
+              const channelVariant = channel === 'SLACK' ? 'purple' as const : channel === 'DISCORD' ? 'blue' as const : 'neutral' as const;
 
-                <div className="flex items-center gap-1 shrink-0">
-                  {testResults[wh.id] && (
-                    <span className={`text-[11px] font-medium ${testResults[wh.id].success ? 'text-[var(--green)]' : 'text-[var(--red)]'}`}>
-                      {testResults[wh.id].success ? 'OK' : testResults[wh.id].error || 'Failed'}
-                    </span>
-                  )}
-                  <button
-                    onClick={() => handleTestWebhook(wh.id)}
-                    className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-3)] hover:text-[var(--accent)]"
-                    title="Test webhook"
-                  >
-                    <Send size={13} />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteWebhook(wh.id)}
-                    className="p-1.5 rounded-lg hover:bg-[var(--red-bg)] text-[var(--text-3)] hover:text-[var(--red)]"
-                    title="Delete"
-                  >
-                    <Trash2 size={13} />
-                  </button>
+              return (
+                <div key={wh.id} className={`flex items-center gap-3 py-2 ${!wh.enabled ? 'opacity-50' : ''}`}>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] font-medium text-[var(--text-1)]">{wh.name}</span>
+                      <StatTag variant={channelVariant}>{channelLabel}</StatTag>
+                      {!wh.enabled && <StatTag variant="red">Disabled</StatTag>}
+                    </div>
+                    <div className="text-[12px] text-[var(--text-3)] mt-0.5 truncate">
+                      {wh.url.length > 50 ? wh.url.slice(0, 50) + '...' : wh.url}
+                    </div>
+                    <div className="flex items-center gap-1 mt-1">
+                      {(wh.events as string[]).map((ev) => (
+                        <StatTag key={ev} variant="neutral">{ev}</StatTag>
+                      ))}
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 shrink-0">
+                    {testResults[wh.id] && (
+                      <span className={`text-[11px] font-medium ${testResults[wh.id].success ? 'text-[var(--green)]' : 'text-[var(--red)]'}`}>
+                        {testResults[wh.id].success ? 'OK' : testResults[wh.id].error || 'Failed'}
+                      </span>
+                    )}
+                    <button
+                      onClick={() => handleTestWebhook(wh.id)}
+                      className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-3)] hover:text-[var(--accent)]"
+                      title="Test webhook"
+                    >
+                      <Send size={13} />
+                    </button>
+                    {!wh.enabled && (
+                      <button
+                        onClick={() => handleReenableWebhook(wh.id)}
+                        className="p-1.5 rounded-lg hover:bg-[var(--surface-hover)] text-[var(--text-3)] hover:text-[var(--green)]"
+                        title="Re-enable"
+                      >
+                        <RotateCcw size={13} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDeleteWebhook(wh.id)}
+                      className="p-1.5 rounded-lg hover:bg-[var(--red-bg)] text-[var(--text-3)] hover:text-[var(--red)]"
+                      title="Delete"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
 
             {(!webhooks || webhooks.length === 0) && !showAddWebhook && (
               <p className="text-[13px] text-[var(--text-3)] py-2">No webhooks configured.</p>
@@ -175,6 +199,28 @@ export default function SettingsPage() {
 
             {showAddWebhook && (
               <div className="border border-[var(--border)] rounded-[12px] p-4 space-y-3 mt-2">
+                <div>
+                  <label className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--text-3)] mb-1.5">Channel</label>
+                  <div className="flex gap-2">
+                    {(['SLACK', 'DISCORD', 'CUSTOM'] as const).map((ch) => {
+                      const labels = { SLACK: 'Slack', DISCORD: 'Discord', CUSTOM: 'Custom Webhook' };
+                      return (
+                        <button
+                          key={ch}
+                          type="button"
+                          onClick={() => setWhChannel(ch)}
+                          className={`rounded-[8px] px-3 py-1.5 text-[12px] font-medium border transition-colors ${
+                            whChannel === ch
+                              ? 'border-[var(--accent)] bg-[var(--accent-bg)] text-[var(--accent)]'
+                              : 'border-[var(--border)] text-[var(--text-2)] hover:border-[var(--border-hover)]'
+                          }`}
+                        >
+                          {labels[ch]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <input
                   className="w-full rounded-[8px] border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[13px]"
                   value={whName}
@@ -185,14 +231,29 @@ export default function SettingsPage() {
                   className="w-full rounded-[8px] border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[13px]"
                   value={whUrl}
                   onChange={(e) => setWhUrl(e.target.value)}
-                  placeholder="https://hooks.example.com/pulse"
+                  placeholder={
+                    whChannel === 'SLACK'
+                      ? 'https://hooks.slack.com/services/T.../B.../...'
+                      : whChannel === 'DISCORD'
+                        ? 'https://discord.com/api/webhooks/...'
+                        : 'https://hooks.example.com/pulse'
+                  }
                 />
-                <input
-                  className="w-full rounded-[8px] border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[13px]"
-                  value={whSecret}
-                  onChange={(e) => setWhSecret(e.target.value)}
-                  placeholder="Secret (optional, for HMAC signing)"
-                />
+                {whChannel === 'CUSTOM' && (
+                  <input
+                    className="w-full rounded-[8px] border border-[var(--border)] bg-[var(--bg)] px-3 py-2 text-[13px]"
+                    value={whSecret}
+                    onChange={(e) => setWhSecret(e.target.value)}
+                    placeholder="Secret (optional, for HMAC signing)"
+                  />
+                )}
+                {whChannel !== 'CUSTOM' && (
+                  <p className="text-[11px] text-[var(--text-3)]">
+                    {whChannel === 'SLACK'
+                      ? 'Paste your Slack Incoming Webhook URL. Pulse sends Block Kit formatted messages with color-coded severity.'
+                      : 'Paste your Discord Webhook URL. Pulse sends rich embeds with severity colors and metadata fields.'}
+                  </p>
+                )}
                 <div>
                   <label className="block text-[11px] font-semibold uppercase tracking-wider text-[var(--text-3)] mb-1.5">Events</label>
                   <div className="flex flex-wrap gap-2">
