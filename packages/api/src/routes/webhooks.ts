@@ -27,9 +27,11 @@ webhooksRouter.get('/:id', async (req, res) => {
   }
 });
 
+const VALID_CHANNELS = ['CUSTOM', 'SLACK', 'DISCORD'] as const;
+
 webhooksRouter.post('/', requireRole('OWNER', 'ADMIN'), async (req, res) => {
   try {
-    const { name, url, events, secret } = req.body;
+    const { name, url, events, secret, channel } = req.body;
 
     if (!name || typeof name !== 'string') { res.status(400).json({ error: 'name is required (string)' }); return; }
     if (!url || typeof url !== 'string') { res.status(400).json({ error: 'url is required (string)' }); return; }
@@ -38,9 +40,13 @@ webhooksRouter.post('/', requireRole('OWNER', 'ADMIN'), async (req, res) => {
     if (!events.every((e: string) => VALID_EVENT_TYPES.includes(e as AlertType))) {
       res.status(400).json({ error: `events must contain only: ${VALID_EVENT_TYPES.join(', ')}` }); return;
     }
+    if (channel && !VALID_CHANNELS.includes(channel)) {
+      res.status(400).json({ error: `channel must be one of: ${VALID_CHANNELS.join(', ')}` }); return;
+    }
 
     const data: Record<string, unknown> = { name, url, events };
     if (secret && typeof secret === 'string') data.secret = secret;
+    if (channel) data.channel = channel;
 
     const webhook = await req.prisma!.webhook.create({ data: data as any });
     res.status(201).json({ ...webhook, secret: webhook.secret ? '***' : null });
@@ -52,7 +58,7 @@ webhooksRouter.post('/', requireRole('OWNER', 'ADMIN'), async (req, res) => {
 webhooksRouter.put('/:id', requireRole('OWNER', 'ADMIN'), async (req, res) => {
   try {
     const id = req.params.id as string;
-    const { name, url, events, secret } = req.body;
+    const { name, url, events, secret, channel } = req.body;
     const data: Record<string, unknown> = {};
 
     if (name !== undefined) {
@@ -74,6 +80,12 @@ webhooksRouter.put('/:id', requireRole('OWNER', 'ADMIN'), async (req, res) => {
     if (secret !== undefined) {
       if (typeof secret !== 'string') { res.status(400).json({ error: 'secret must be a string' }); return; }
       data.secret = secret;
+    }
+    if (channel !== undefined) {
+      if (!VALID_CHANNELS.includes(channel)) {
+        res.status(400).json({ error: `channel must be one of: ${VALID_CHANNELS.join(', ')}` }); return;
+      }
+      data.channel = channel;
     }
 
     const webhook = await req.prisma!.webhook.update({ where: { id }, data: data as any });

@@ -1,10 +1,13 @@
 import { createHmac } from 'crypto';
 import type { PrismaClient } from '@prisma/client';
 import type { Alert } from '@pulse/shared';
+import { getChannelPayload, getTestPayload } from './notification-channels.js';
 
 const MAX_FAIL_COUNT = 5;
 const RETRY_DELAYS = [1000, 5000, 30000]; // 1s, 5s, 30s
 const MAX_ATTEMPTS = 3;
+
+type WebhookChannel = 'CUSTOM' | 'SLACK' | 'DISCORD';
 
 class WebhookService {
   async dispatch(alert: Alert, db: PrismaClient): Promise<void> {
@@ -22,12 +25,13 @@ class WebhookService {
   }
 
   private async deliverWithRetry(
-    webhook: { id: string; url: string; secret: string | null; failCount: number },
+    webhook: { id: string; url: string; secret: string | null; failCount: number; channel?: string },
     alert: Alert,
     db: PrismaClient,
   ): Promise<void> {
-    const payload = this.buildPayload(alert);
-    const headers = this.buildHeaders(payload, webhook.secret);
+    const channel = (webhook.channel ?? 'CUSTOM') as WebhookChannel;
+    const { body: payload, contentType } = getChannelPayload(channel, alert);
+    const headers = this.buildHeaders(payload, webhook.secret, contentType);
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
       try {
@@ -74,23 +78,12 @@ class WebhookService {
     }
   }
 
-  private buildPayload(alert: Alert): string {
-    return JSON.stringify({
-      event: alert.type,
-      alert: {
-        id: alert.id,
-        type: alert.type,
-        severity: alert.severity,
-        title: alert.title,
-        message: alert.message,
-        metadata: alert.metadata,
-      },
-      timestamp: new Date().toISOString(),
-    });
-  }
-
-  private buildHeaders(payload: string, secret: string | null): Record<string, string> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  private buildHeaders(
+    payload: string,
+    secret: string | null,
+    contentType: string = 'application/json',
+  ): Record<string, string> {
+    const headers: Record<string, string> = { 'Content-Type': contentType };
     if (secret) {
       headers['X-Pulse-Signature'] = createHmac('sha256', secret)
         .update(payload)
@@ -126,25 +119,9 @@ class WebhookService {
     const webhook = await db.webhook.findUnique({ where: { id: webhookId } });
     if (!webhook) return { success: false, error: 'Webhook not found' };
 
-    const payload = JSON.stringify({
-      event: 'TEST',
-      alert: {
-        id: 'test',
-        type: 'SYSTEM',
-        severity: 'INFO',
-        title: 'Webhook test',
-        message: 'This is a test payload from Pulse',
-        metadata: {},
-      },
-      timestamp: new Date().toISOString(),
-    });
-
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-    if (webhook.secret) {
-      headers['X-Pulse-Signature'] = createHmac('sha256', webhook.secret)
-        .update(payload)
-        .digest('hex');
-    }
+    const channel = ((webhook as any).channel ?? 'CUSTOM') as WebhookChannel;
+    const payload = getTestPayload(channel);
+    const headers = this.buildHeaders(payload, webhook.secret);
 
     try {
       const res = await fetch(webhook.url, {

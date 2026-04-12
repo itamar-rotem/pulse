@@ -260,22 +260,29 @@ enum InsightStatus {
 }
 
 model Webhook {
-  id         String        @id @default(uuid())
+  id         String         @id @default(uuid())
   name       String
   url        String
   secret     String?
+  channel    WebhookChannel @default(CUSTOM)
   events     String[]
-  enabled    Boolean       @default(true)
-  failCount  Int           @default(0) @map("fail_count")
-  createdAt  DateTime      @default(now()) @map("created_at")
-  updatedAt  DateTime      @updatedAt @map("updated_at")
-  lastError  String?       @map("last_error")
-  lastSentAt DateTime?     @map("last_sent_at")
-  orgId      String        @map("org_id")
-  org        Organization  @relation(fields: [orgId], references: [id])
+  enabled    Boolean        @default(true)
+  failCount  Int            @default(0) @map("fail_count")
+  createdAt  DateTime       @default(now()) @map("created_at")
+  updatedAt  DateTime       @updatedAt @map("updated_at")
+  lastError  String?        @map("last_error")
+  lastSentAt DateTime?      @map("last_sent_at")
+  orgId      String         @map("org_id")
+  org        Organization   @relation(fields: [orgId], references: [id])
 
   @@index([orgId])
   @@map("webhooks")
+}
+
+enum WebhookChannel {
+  CUSTOM
+  SLACK
+  DISCORD
 }
 
 enum ProjectStatus {
