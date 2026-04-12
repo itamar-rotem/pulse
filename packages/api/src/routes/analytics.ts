@@ -29,15 +29,15 @@ analyticsRouter.get('/cost-trends', async (req, res) => {
 });
 
 /**
- * GET /api/analytics/breakdown?groupBy=project|model|sessionType&days=30&projectId=
+ * GET /api/analytics/breakdown?groupBy=project|model|sessionType|user&days=30&projectId=
  *
  * Returns cost breakdown grouped by the specified dimension.
  */
 analyticsRouter.get('/breakdown', async (req, res) => {
   try {
-    const groupBy = (['project', 'model', 'sessionType'].includes(req.query.groupBy as string)
+    const groupBy = (['project', 'model', 'sessionType', 'user'].includes(req.query.groupBy as string)
       ? req.query.groupBy
-      : 'project') as 'project' | 'model' | 'sessionType';
+      : 'project') as 'project' | 'model' | 'sessionType' | 'user';
     const days = Math.min(365, Math.max(1, Number(req.query.days) || 30));
     const projectId = req.query.projectId as string | undefined;
 

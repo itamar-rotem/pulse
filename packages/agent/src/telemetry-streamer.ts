@@ -103,7 +103,7 @@ export class TelemetryStreamer {
     this.send('token_event', event);
   }
 
-  sendSessionStart(data: { id: string; tool: string; projectSlug: string; sessionType: string; model: string }): void {
+  sendSessionStart(data: { id: string; tool: string; projectSlug: string; sessionType: string; model: string; userName?: string }): void {
     this.send('session_start', data);
   }
 

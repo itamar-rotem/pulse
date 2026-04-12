@@ -142,6 +142,25 @@ describe('Analytics routes', () => {
       expect(res.body.breakdown[0].key).toBe('claude-opus-4');
     });
 
+    it('groups by user', async () => {
+      mockPrisma.session.findMany.mockResolvedValue([
+        { userName: 'alice', costUsd: 12, inputTokens: 5000, outputTokens: 2000 },
+        { userName: 'alice', costUsd: 8, inputTokens: 3000, outputTokens: 1000 },
+        { userName: 'bob', costUsd: 5, inputTokens: 2000, outputTokens: 500 },
+        { userName: null, costUsd: 1, inputTokens: 500, outputTokens: 200 },
+      ]);
+
+      const app = createApp();
+      const res = await request(app).get('/analytics/breakdown?groupBy=user');
+
+      expect(res.status).toBe(200);
+      expect(res.body.breakdown).toHaveLength(3);
+      // Alice should be first (highest cost)
+      expect(res.body.breakdown[0].key).toBe('alice');
+      expect(res.body.breakdown[0].cost).toBe(20);
+      expect(res.body.breakdown[0].sessions).toBe(2);
+    });
+
     it('groups by sessionType', async () => {
       mockPrisma.session.findMany.mockResolvedValue([
         { sessionType: 'human', costUsd: 10, inputTokens: 5000, outputTokens: 2000 },
@@ -193,6 +212,7 @@ describe('Analytics routes', () => {
           tool: 'claude-code',
           model: 'claude-sonnet-4-6',
           sessionType: 'human',
+          userName: 'itamar',
           status: 'ENDED',
           startedAt: new Date('2026-04-01'),
           endedAt: new Date('2026-04-01T01:00:00Z'),
@@ -214,7 +234,7 @@ describe('Analytics routes', () => {
       expect(res.headers['content-disposition']).toContain('pulse-sessions-30d.csv');
 
       const lines = res.text.split('\n');
-      expect(lines[0]).toBe('id,project,tool,model,type,status,started_at,ended_at,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens,cost_usd');
+      expect(lines[0]).toBe('id,project,user,tool,model,type,status,started_at,ended_at,input_tokens,output_tokens,cache_creation_tokens,cache_read_tokens,cost_usd');
       expect(lines.length).toBe(2); // header + 1 data row
     });
 
@@ -234,6 +254,7 @@ describe('Analytics routes', () => {
           tool: 'claude-code',
           model: 'claude-sonnet-4-6',
           sessionType: 'human',
+          userName: null,
           status: 'ENDED',
           startedAt: new Date('2026-04-01'),
           endedAt: null,
