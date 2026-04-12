@@ -19,6 +19,7 @@ interface Session {
   projectSlug: string;
   sessionType: string;
   model: string;
+  userName?: string | null;
   startedAt: string;
   endedAt: string | null;
   inputTokens: number;
@@ -44,6 +45,7 @@ export function SessionTable({ sessions }: SessionTableProps) {
       <TableHeader>
         <TableRow>
           <TableHead>Project</TableHead>
+          <TableHead>User</TableHead>
           <TableHead>Type</TableHead>
           <TableHead>Model</TableHead>
           <TableHead>Duration</TableHead>
@@ -67,6 +69,9 @@ export function SessionTable({ sessions }: SessionTableProps) {
                 >
                   {session.projectSlug}
                 </Link>
+              </TableCell>
+              <TableCell className="text-[12px] text-[var(--text-2)]">
+                {session.userName || '—'}
               </TableCell>
               <TableCell>
                 <StatTag variant={session.sessionType === 'human' ? 'blue' : 'purple'}>

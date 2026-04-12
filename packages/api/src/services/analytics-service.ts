@@ -34,7 +34,7 @@ export interface CostTrendsParams {
 }
 
 export interface BreakdownParams {
-  groupBy: 'project' | 'model' | 'sessionType';
+  groupBy: 'project' | 'model' | 'sessionType' | 'user';
   days: number;
   projectId?: string;
 }
@@ -138,7 +138,9 @@ export async function getCostBreakdown(
       ? 'projectId'
       : params.groupBy === 'model'
         ? 'model'
-        : 'sessionType';
+        : params.groupBy === 'user'
+          ? 'userName'
+          : 'sessionType';
 
   const sessions = await (db as any).session.findMany({
     where,
@@ -261,6 +263,7 @@ export async function getSessionsForExport(
       model: true,
       sessionType: true,
       status: true,
+      userName: true,
       startedAt: true,
       endedAt: true,
       inputTokens: true,
@@ -278,6 +281,7 @@ export async function getSessionsForExport(
   return sessions.map((s: any) => ({
     id: s.id,
     project: s.project?.name ?? s.projectSlug,
+    user: s.userName ?? '',
     tool: s.tool,
     model: s.model,
     type: s.sessionType,

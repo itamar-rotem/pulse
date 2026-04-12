@@ -25,6 +25,7 @@ export interface Session {
   projectSlug: string;
   sessionType: SessionType;
   model: string;
+  userName?: string | null;
   startedAt: string;
   endedAt: string | null;
   inputTokens: number;

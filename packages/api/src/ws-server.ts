@@ -210,6 +210,7 @@ async function handleAgentMessage(
       projectSlug: msg.data.projectSlug as string,
       sessionType: msg.data.sessionType as string,
       model: msg.data.model as string,
+      userName: (msg.data.userName as string) || null,
       orgId,
     }, db).catch(() => {}); // ignore if session already exists
   } else if (msg.type === 'token_event') {

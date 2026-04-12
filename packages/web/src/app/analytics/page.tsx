@@ -27,7 +27,7 @@ import {
 import { useProjects } from '@/hooks/use-projects';
 
 type Granularity = 'day' | 'week' | 'month';
-type GroupBy = 'project' | 'model' | 'sessionType';
+type GroupBy = 'project' | 'model' | 'sessionType' | 'user';
 type Days = 7 | 30 | 90;
 
 const BAR_COLORS = [colors.accent, colors.blue, colors.purple, colors.green, colors.amber, colors.red];
@@ -197,6 +197,7 @@ function AnalyticsContent() {
                   { value: 'project' as const, label: 'Project' },
                   { value: 'model' as const, label: 'Model' },
                   { value: 'sessionType' as const, label: 'Type' },
+                  { value: 'user' as const, label: 'User' },
                 ]).map((opt) => (
                   <button
                     key={opt.value}

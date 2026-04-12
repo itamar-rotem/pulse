@@ -91,6 +91,7 @@ model Session {
   cacheCreationTokens Int           @default(0) @map("cache_creation_tokens")
   cacheReadTokens     Int           @default(0) @map("cache_read_tokens")
   costUsd             Float         @default(0) @map("cost_usd")
+  userName            String?       @map("user_name")
   orgId               String        @map("org_id")
   org                 Organization  @relation(fields: [orgId], references: [id])
   projectId           String        @map("project_id")

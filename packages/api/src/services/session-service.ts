@@ -9,6 +9,7 @@ export async function startSession(
     projectSlug: string;
     sessionType: string;
     model: string;
+    userName?: string | null;
     orgId: string; // explicit orgId for race-safe project upsert
   },
   db: PrismaClient,
@@ -24,6 +25,7 @@ export async function startSession(
       projectId: project.id,
       sessionType: data.sessionType,
       model: data.model,
+      ...(data.userName ? { userName: data.userName } : {}),
     } as any,
   });
   await publishSessionUpdate(session);

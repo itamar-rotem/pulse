@@ -1,10 +1,32 @@
 #!/usr/bin/env node
+import { execSync } from 'child_process';
+import { userInfo } from 'os';
 import { Command } from 'commander';
 import { ClaudeCodeReader } from './claude-reader.js';
 import { SessionTracker } from './session-tracker.js';
 import { TelemetryStreamer } from './telemetry-streamer.js';
 import { createLocalServer } from './local-server.js';
 import { loadConfig } from './config.js';
+
+function detectUserName(): string {
+  // 1. Environment variable override
+  if (process.env.PULSE_USER_NAME) return process.env.PULSE_USER_NAME;
+
+  // 2. Git user.name (most meaningful for dev teams)
+  try {
+    const gitName = execSync('git config user.name', { encoding: 'utf-8', timeout: 3000 }).trim();
+    if (gitName) return gitName;
+  } catch {
+    // git not available or not in a repo
+  }
+
+  // 3. OS username
+  try {
+    return userInfo().username;
+  } catch {
+    return 'unknown';
+  }
+}
 
 const program = new Command();
 
@@ -19,12 +41,14 @@ program
   .option('--api-url <url>', 'Pulse API WebSocket URL')
   .option('--api-key <key>', 'Pulse API key (org-scoped)')
   .option('--user-token <token>', 'Personal user token (optional)')
+  .option('--user-name <name>', 'Developer name for per-user analytics')
   .option('--port <number>', 'Local REST API port', '7823')
   .action(async (opts) => {
     const config = loadConfig();
     const apiUrl = opts.apiUrl || config.apiUrl;
     const apiKey = opts.apiKey || process.env.PULSE_API_KEY || config.apiKey || process.env.AGENT_API_KEY || '';
     const userToken = opts.userToken || process.env.PULSE_USER_TOKEN || config.userToken;
+    const userName = opts.userName || detectUserName();
     const port = parseInt(opts.port) || config.localPort;
 
     if (!apiKey) {
@@ -33,7 +57,7 @@ program
     }
     void userToken; // Reserved for future per-user attribution
 
-    console.log('Starting Pulse agent...');
+    console.log(`Starting Pulse agent as "${userName}"...`);
 
     const tracker = new SessionTracker();
     const streamer = new TelemetryStreamer(apiUrl, apiKey);
@@ -55,6 +79,7 @@ program
             projectSlug: session.projectSlug,
             sessionType: session.sessionType,
             model: msg.model,
+            userName,
           });
         }
       }
