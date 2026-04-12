@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getAuthToken } from '@/lib/api';
 
 const WS_URL = process.env.NEXT_PUBLIC_WS_URL || 'ws://localhost:3001/ws';
@@ -17,16 +17,17 @@ export function useWebSocket(onMessage: (msg: WsMessage) => void) {
   onMessageRef.current = onMessage;
   const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const closedRef = useRef(false);
+  const connectRef = useRef<() => void>(() => {});
 
-  const connect = useCallback(async () => {
+  connectRef.current = async () => {
     if (closedRef.current) return;
     try {
       const token = await getAuthToken();
       if (closedRef.current) return;
       if (!token) {
-        // Clerk token not ready yet — defer. TokenProvider will install it shortly.
+        // Clerk token not ready yet, defer. TokenProvider will install it shortly.
         reconnectTimerRef.current = setTimeout(() => {
-          void connect();
+          connectRef.current();
         }, 500);
         return;
       }
@@ -39,7 +40,7 @@ export function useWebSocket(onMessage: (msg: WsMessage) => void) {
         setConnected(false);
         if (closedRef.current) return;
         reconnectTimerRef.current = setTimeout(() => {
-          void connect();
+          connectRef.current();
         }, 2000);
       };
       ws.onerror = () => {
@@ -58,14 +59,14 @@ export function useWebSocket(onMessage: (msg: WsMessage) => void) {
     } catch {
       if (closedRef.current) return;
       reconnectTimerRef.current = setTimeout(() => {
-        void connect();
+        connectRef.current();
       }, 2000);
     }
-  }, []);
+  };
 
   useEffect(() => {
     closedRef.current = false;
-    void connect();
+    connectRef.current();
     return () => {
       closedRef.current = true;
       if (reconnectTimerRef.current) {
@@ -74,7 +75,7 @@ export function useWebSocket(onMessage: (msg: WsMessage) => void) {
       }
       wsRef.current?.close();
     };
-  }, [connect]);
+  }, []);
 
   return { connected };
 }
