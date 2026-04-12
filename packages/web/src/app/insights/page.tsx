@@ -112,7 +112,6 @@ function InsightsPageInner() {
 
           {insights.map((insight) => {
             const config = CATEGORY_CONFIG[insight.category];
-            const Icon = config.icon;
             const impact = insight.impact as Record<string, unknown>;
 
             return (

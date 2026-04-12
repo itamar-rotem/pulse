@@ -31,7 +31,8 @@ export default function SettingsPage() {
   }
 
   async function handleCreateWebhook() {
-    await createWebhook({ name: whName, url: whUrl, events: whEvents as any, ...(whSecret ? { secret: whSecret } : {}) } as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await createWebhook({ name: whName, url: whUrl, events: whEvents, ...(whSecret ? { secret: whSecret } : {}) } as Record<string, unknown> as any);
     setShowAddWebhook(false);
     setWhName('');
     setWhUrl('');

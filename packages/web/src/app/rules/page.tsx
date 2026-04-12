@@ -71,7 +71,8 @@ export default function RulesPage() {
       condition = { maxMinutes: parseInt(formMaxMinutes) };
     }
 
-    await createRule({ name: formName, type: formType, scope, condition, action: formAction } as any);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await createRule({ name: formName, type: formType, scope, condition, action: formAction } as Record<string, unknown> as any);
     setShowCreate(false);
     setFormName('');
     mutate();
