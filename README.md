@@ -94,6 +94,18 @@ npx pulse-agent status
 - Project filter dropdowns across sessions, live, alerts, and insights
 - Projects list, detail, and settings pages with 30d cost + session aggregates
 
+### Team Analytics
+- Cost trends chart with day/week/month granularity and 7d/30d/90d range
+- Cost breakdown by project, model, or session type with percentage labels
+- Budget vs actual progress bars for every active project
+- CSV export of session data for the selected time range
+
+### Notification Channels
+- Built-in Slack integration (Block Kit with color-coded severity)
+- Built-in Discord integration (rich embeds with severity colors)
+- Custom webhook with HMAC signature verification (existing)
+- Test endpoint to verify integration before going live
+
 ## Tech Stack
 
 - **Monorepo:** pnpm workspaces + Turborepo
