@@ -11,6 +11,12 @@ export async function authMiddleware(
   next: NextFunction,
 ): Promise<void> {
   try {
+    // Dev bypass: skip auth entirely in local development
+    if (process.env.DEV_BYPASS_AUTH === 'true') {
+      req.auth = { orgId: DEFAULT_ORG_ID, role: 'ADMIN' };
+      return next();
+    }
+
     // Path 1: Org-scoped API key
     const apiKeyHeader = req.headers['x-api-key'] as string | undefined;
     if (apiKeyHeader) {
