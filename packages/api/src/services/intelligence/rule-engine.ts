@@ -185,19 +185,28 @@ class RuleEngine {
         periodStart.setUTCHours(0, 0, 0, 0);
       }
 
+      // Include sessions that overlap the period: started in-period OR still
+      // running (endedAt is null) OR ended after the period started. This
+      // catches long-running sessions that straddle the period boundary.
       const result = await globalPrisma.session.aggregate({
         where: {
           orgId: rule.orgId,
           projectId,
-          startedAt: { gte: periodStart },
+          OR: [
+            { startedAt: { gte: periodStart } },
+            { endedAt: null, startedAt: { lt: periodStart } },
+            { endedAt: { gte: periodStart }, startedAt: { lt: periodStart } },
+          ],
         },
         _sum: { costUsd: true },
       });
       projectCost = result._sum.costUsd ?? 0;
 
-      // Write back to Redis for subsequent evaluations
+      // Seed the Redis counter so subsequent evaluations hit cache.
+      // NX ensures we never clobber a live counter that INCRBYFLOAT has been
+      // incrementing — if the key already exists we leave it alone.
       const ttl = period === 'monthly' ? 31 * 86400 : period === 'weekly' ? 7 * 86400 : 86400;
-      await redis.set(cacheKey, projectCost.toString(), 'EX', ttl).catch(() => {});
+      await redis.set(cacheKey, projectCost.toString(), 'EX', ttl, 'NX').catch(() => {});
     }
 
     if (projectCost < maxCost) return null;

@@ -42,6 +42,18 @@ export function createTenantPrisma(orgId: string) {
           }
         }
 
+        // Upsert has `create` and `update` instead of `data`. Inject orgId
+        // into both so callers don't need to remember to pass it manually.
+        if (operation === 'upsert') {
+          const a = args as Record<string, unknown>;
+          if (a.create && typeof a.create === 'object' && !Array.isArray(a.create)) {
+            (a.create as Record<string, unknown>).orgId = orgId;
+          }
+          if (a.update && typeof a.update === 'object' && !Array.isArray(a.update)) {
+            (a.update as Record<string, unknown>).orgId = orgId;
+          }
+        }
+
         return query(args);
       },
     },

@@ -89,6 +89,28 @@ describe('createTenantPrisma', () => {
     expect(mockQuery).toHaveBeenCalledWith(args);
   });
 
+  it('injects orgId into upsert create and update branches', () => {
+    let capturedHandler: Function;
+    mockPrisma.$extends.mockImplementation((ext: any) => {
+      capturedHandler = ext.query.$allOperations;
+      return {};
+    });
+
+    createTenantPrisma('org-upsert');
+
+    const mockQuery = vi.fn((args: any) => args);
+    const args = {
+      where: { orgId_slug: { orgId: 'org-upsert', slug: 'app' } },
+      create: { slug: 'app', name: 'App', status: 'ACTIVE' },
+      update: {},
+    };
+    capturedHandler!({ args, query: mockQuery, operation: 'upsert', model: 'Project' });
+
+    expect((args.create as any).orgId).toBe('org-upsert');
+    expect((args.update as any).orgId).toBe('org-upsert');
+    expect(mockQuery).toHaveBeenCalledWith(args);
+  });
+
   it('passes through non-tenant models unchanged', () => {
     let capturedHandler: Function;
     mockPrisma.$extends.mockImplementation((ext: any) => {
