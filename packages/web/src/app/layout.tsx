@@ -3,6 +3,9 @@ import { ClerkProvider } from '@clerk/nextjs';
 import "./globals.css";
 import { Sidebar } from "@/components/layout/sidebar";
 import { TokenProvider } from "@/components/auth/token-provider";
+import { ToastProvider } from "@/components/ui/toast-context";
+import { ToastContainer } from "@/components/ui/toast-container";
+import { AlertListener } from "@/components/layout/alert-listener";
 
 export const metadata: Metadata = {
   title: "Pulse — AI Dev Health Monitor",
@@ -22,8 +25,12 @@ export default function RootLayout({
           style={{ background: 'var(--bg)', color: 'var(--text-1)' }}
         >
           <TokenProvider>
-            <Sidebar />
-            <main className="flex-1 overflow-y-auto">{children}</main>
+            <ToastProvider>
+              <Sidebar />
+              <main className="flex-1 overflow-y-auto">{children}</main>
+              <AlertListener />
+              <ToastContainer />
+            </ToastProvider>
           </TokenProvider>
         </body>
       </html>
