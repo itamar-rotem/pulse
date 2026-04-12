@@ -137,7 +137,7 @@ export default function SettingsPage() {
         <Section title="Webhooks">
           <div className="space-y-3">
             {webhooks?.map((wh) => {
-              const channel = (wh as Record<string, unknown>).channel as string | undefined;
+              const channel = (wh as unknown as Record<string, unknown>).channel as string | undefined;
               const channelLabel = channel === 'SLACK' ? 'Slack' : channel === 'DISCORD' ? 'Discord' : 'Custom';
               const channelVariant = channel === 'SLACK' ? 'purple' as const : channel === 'DISCORD' ? 'blue' as const : 'neutral' as const;
 
