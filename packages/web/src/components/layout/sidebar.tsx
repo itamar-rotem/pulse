@@ -11,6 +11,7 @@ import {
   Key,
   Users,
   Folder,
+  BarChart3,
 } from 'lucide-react';
 import { UserButton, OrganizationSwitcher } from '@clerk/nextjs';
 import { NavItem } from '@/components/ui/nav-item';
@@ -63,6 +64,7 @@ export function Sidebar() {
             <NavItem href="/live" label="Live View" icon={Radio} />
             <NavItem href="/sessions" label="Sessions" icon={History} />
             <NavItem href="/projects" label="Projects" icon={Folder} />
+            <NavItem href="/analytics" label="Analytics" icon={BarChart3} />
           </div>
         </div>
 
