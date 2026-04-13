@@ -6,7 +6,7 @@
   "scripts": {
     "build": "tsc",
     "dev": "tsx watch src/index.ts",
-    "start": "node dist/index.js",
+    "start": "prisma db push --skip-generate && node dist/index.js",
     "test": "vitest run",
     "test:watch": "vitest",
     "db:push": "prisma db push",
