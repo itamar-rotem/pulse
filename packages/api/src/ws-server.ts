@@ -90,26 +90,28 @@ function extractApiKey(req: IncomingMessage, url: URL): string | null {
 export function createWsServer(server: Server): WebSocketServer {
   const wss = new WebSocketServer({ server, path: '/ws' });
 
-  redisSub.subscribe('pulse:token_events', 'pulse:session_updates', 'pulse:alerts').catch(() => {
-    console.warn('Redis subscribe failed — WebSocket broadcast will use direct relay');
-  });
+  if (redisSub) {
+    redisSub.subscribe('pulse:token_events', 'pulse:session_updates', 'pulse:alerts').catch(() => {
+      console.warn('Redis subscribe failed — WebSocket broadcast will use direct relay');
+    });
 
-  redisSub.on('message', (channel, message) => {
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(message);
-    } catch {
-      return;
-    }
-    const payloadOrgId = typeof parsed.orgId === 'string' ? parsed.orgId : undefined;
-    const envelopeType =
-      channel === 'pulse:alerts'
-        ? 'alert'
-        : channel === 'pulse:token_events'
-          ? 'token_event'
-          : 'session_update';
-    broadcastToDashboard(wss, { type: envelopeType, data: parsed }, payloadOrgId);
-  });
+    redisSub.on('message', (channel, message) => {
+      let parsed: Record<string, unknown>;
+      try {
+        parsed = JSON.parse(message);
+      } catch {
+        return;
+      }
+      const payloadOrgId = typeof parsed.orgId === 'string' ? parsed.orgId : undefined;
+      const envelopeType =
+        channel === 'pulse:alerts'
+          ? 'alert'
+          : channel === 'pulse:token_events'
+            ? 'token_event'
+            : 'session_update';
+      broadcastToDashboard(wss, { type: envelopeType, data: parsed }, payloadOrgId);
+    });
+  }
 
   wss.on('connection', async (ws: TaggedWebSocket, req) => {
     const url = new URL(req.url || '/', `http://${req.headers.host}`);
@@ -244,7 +246,7 @@ async function handleAgentMessage(
     // The midnight cron deletes these keys; the NX TTL guarantees bounded growth even if
     // the cron fails to run on a given day.
     const cost = d.costDeltaUsd as number;
-    {
+    if (redis) {
       const key = `pulse:daily_cost:${orgId}`;
       const pipeline = redis.pipeline();
       pipeline.incrbyfloat(key, cost);
@@ -256,7 +258,7 @@ async function handleAgentMessage(
     // (not slug) so project renames can't stale-key counters. The Session row
     // already has projectId, which we resolved during updateSession.
     const projectId = (result.session as { projectId?: string | null }).projectId;
-    if (projectId) {
+    if (projectId && redis) {
       const periods: Array<['daily' | 'weekly' | 'monthly', number]> = [
         ['daily', 90000],      // 25h
         ['weekly', 691200],    // 8d

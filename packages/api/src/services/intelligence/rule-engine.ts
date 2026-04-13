@@ -131,7 +131,7 @@ class RuleEngine {
 
     // Try Redis cache first, fall back to DB
     let todayCost = 0;
-    const cached = await redis.get(cacheKey).catch(() => null);
+    const cached = redis ? await redis.get(cacheKey).catch(() => null) : null;
     if (cached) {
       todayCost = parseFloat(cached);
     } else {
@@ -143,7 +143,7 @@ class RuleEngine {
       });
       todayCost = result._sum.costUsd ?? 0;
       // Write back to Redis for subsequent evaluations
-      await redis.set(cacheKey, todayCost.toString(), 'EX', 86400).catch(() => {});
+      if (redis) await redis.set(cacheKey, todayCost.toString(), 'EX', 86400).catch(() => {});
     }
 
     if (todayCost < maxCost) return null;
@@ -169,7 +169,7 @@ class RuleEngine {
     let projectCost = 0;
 
     // Try Redis cache first
-    const cached = await redis.get(cacheKey).catch(() => null);
+    const cached = redis ? await redis.get(cacheKey).catch(() => null) : null;
     if (cached) {
       projectCost = parseFloat(cached);
     } else {
@@ -206,7 +206,7 @@ class RuleEngine {
       // NX ensures we never clobber a live counter that INCRBYFLOAT has been
       // incrementing — if the key already exists we leave it alone.
       const ttl = period === 'monthly' ? 31 * 86400 : period === 'weekly' ? 7 * 86400 : 86400;
-      await redis.set(cacheKey, projectCost.toString(), 'EX', ttl, 'NX').catch(() => {});
+      if (redis) await redis.set(cacheKey, projectCost.toString(), 'EX', ttl, 'NX').catch(() => {});
     }
 
     if (projectCost < maxCost) return null;

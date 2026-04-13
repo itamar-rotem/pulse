@@ -38,6 +38,7 @@ class Scheduler {
     // TODO: migrate `redis.keys(...)` to `SCAN` once we cross ~1k orgs; see ws-server.ts
     //       project_cost key writers for the corresponding TTL belt-and-suspenders.
     const midnightJob = cron.schedule('0 0 * * *', async () => {
+      if (!redis) return;
       try {
         const dailyKeys = await redis.keys('pulse:daily_cost:*');
         if (dailyKeys.length > 0) {
@@ -55,6 +56,7 @@ class Scheduler {
 
     // Sunday midnight UTC: reset weekly project cost counters
     const weeklyResetJob = cron.schedule('0 0 * * 0', async () => {
+      if (!redis) return;
       try {
         const keys = await redis.keys('pulse:project_cost:*:weekly');
         if (keys.length > 0) {
@@ -68,6 +70,7 @@ class Scheduler {
 
     // 1st of month, midnight UTC: reset monthly project cost counters
     const monthlyResetJob = cron.schedule('0 0 1 * *', async () => {
+      if (!redis) return;
       try {
         const keys = await redis.keys('pulse:project_cost:*:monthly');
         if (keys.length > 0) {

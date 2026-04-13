@@ -19,7 +19,7 @@ server.listen(port, () => {
 process.on('SIGTERM', async () => {
   console.log('Shutting down...');
   scheduler.stop();
-  redis.disconnect();
+  if (redis) redis.disconnect();
   server.close();
   process.exit(0);
 });

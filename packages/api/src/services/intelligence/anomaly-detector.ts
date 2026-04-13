@@ -185,12 +185,14 @@ class AnomalyDetector {
 
   /** Persist baselines to Redis for restart recovery */
   async persistBaselines(): Promise<void> {
+    if (!redis) return;
     const data = Object.fromEntries(this.baselineStats);
     await redis.set('pulse:anomaly_baselines', JSON.stringify(data)).catch(() => {});
   }
 
   /** Load baselines from Redis on startup */
   async loadBaselines(): Promise<void> {
+    if (!redis) return;
     const raw = await redis.get('pulse:anomaly_baselines').catch(() => null);
     if (raw) {
       const data = JSON.parse(raw) as Record<string, RunningStats>;
