@@ -1,0 +1,21 @@
+services:
+  - type: web
+    name: pulse-api
+    runtime: docker
+    dockerfilePath: packages/api/Dockerfile
+    plan: free
+    region: ohio
+    healthCheckPath: /api/health
+    envVars:
+      - key: DATABASE_URL
+        sync: false
+      - key: NODE_ENV
+        value: production
+      - key: API_PORT
+        value: "3001"
+      - key: DEV_BYPASS_AUTH
+        value: "true"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: AGENT_API_KEY
+        generateValue: true
